@@ -8,23 +8,10 @@ import ch.bbw.m450.tictactoe.players.GreedyPlayer;
 
 public class TicTacToeMainTest implements WithAssertions {
 
-    private static Stone[] board(String layout) {
-        var compact = layout.replaceAll("\\s", "");
-        var board = new Stone[TicTacToeMain.BOARD_SIZE];
-        for (var i = 0; i < TicTacToeMain.BOARD_SIZE; i++) {
-            board[i] = switch (compact.charAt(i)) {
-                case 'X' -> Stone.CROSS;
-                case 'O' -> Stone.CIRCLE;
-                default -> null;
-            };
-        }
-        return board;
-    }
-
     @Test
     void givenTopRowFilledWithCross_whenIsWinForCross_thenReturnsTrue() {
         // GIVEN a board whose top row is completely filled with CROSS
-        var board = board("""
+        var board = TicTacToeTestHelpers.board("""
                 X X X
                 . O .
                 O . .
@@ -42,7 +29,7 @@ public class TicTacToeMainTest implements WithAssertions {
     @Test
     void givenMainDiagonalFilledWithCircle_whenIsWinForCircle_thenReturnsTrue() {
         // GIVEN a board with CIRCLE on all three fields of the main diagonal (0, 4, 8)
-        var board = board("""
+        var board = TicTacToeTestHelpers.board("""
                 O X .
                 X O .
                 . . O
@@ -60,7 +47,7 @@ public class TicTacToeMainTest implements WithAssertions {
     @Test
     void givenTopRowFilledWithCircle_whenIsWinForCross_thenReturnsFalse() {
         // GIVEN a board where CIRCLE (not CROSS) owns a full top row
-        var board = board("""
+        var board = TicTacToeTestHelpers.board("""
                 O O O
                 X X .
                 . . .
