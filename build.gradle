@@ -7,6 +7,13 @@ repositories {
 	mavenCentral()
 }
 
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+		vendor = JvmVendorSpec.AZUL
+	}
+}
+
 application {
 	mainClass = 'ch.bbw.m450.tictactoe.TicTacToeMain'
 }

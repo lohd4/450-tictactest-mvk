@@ -1,0 +1,71 @@
+// TicTacTest development container.
+//
+// Stack: Java 25 (Azul Zulu) + Gradle 9.7.0 via ./gradlew.
+// Editor: VS Code + the "Dev Containers" extension (ms-vscode-remote.remote-containers),
+//         or GitHub Codespaces. Open the folder and choose
+//         "Dev Containers: Reopen in Container".
+//
+// Design notes:
+//  - Base image is the official Azul Zulu 25 image on Debian bookworm. The repo pins
+//    the Gradle daemon JVM to "Azul Zulu 25" (gradle/gradle-daemon-jvm.properties) and
+//    the build toolchain to the same (build.gradle), so shipping that exact JDK means
+//    Gradle never downloads a toolchain.
+//  - User tooling (non-root "vscode" user, sudo, git) comes from Dev Container Features
+//    instead of hand-rolled Dockerfile steps, so there is no Dockerfile to maintain.
+//  - ~/.gradle lives on a named volume so the dependency cache survives rebuilds.
+{
+	"name": "TicTacTest (Java 25 / Gradle)",
+	"image": "azul/zulu-openjdk-debian:25",
+
+	"features": {
+		"ghcr.io/devcontainers/features/common-utils:2": {
+			"username": "vscode",
+			"userUid": "automatic",
+			"userGid": "automatic",
+			"installZsh": false,
+			"installOhMyZsh": false,
+			"upgradePackages": true
+		},
+		"ghcr.io/devcontainers/features/git:1": {}
+	},
+
+	"containerUser": "vscode",
+	"remoteUser": "vscode",
+
+	"containerEnv": {
+		"GRADLE_USER_HOME": "/home/vscode/.gradle"
+	},
+
+	"mounts": [
+		"source=tictactest-gradle-cache,target=/home/vscode/.gradle,type=volume"
+	],
+
+	// The named volume mounts as root-owned; hand it to the vscode user once.
+	"onCreateCommand": "sudo chown -R vscode:vscode /home/vscode/.gradle",
+
+	// Warm the wrapper + dependency cache and compile once so IntelliSense is ready.
+	// Invoked via `sh` because a Windows bind mount can refuse `chmod` on gradlew.
+	"postCreateCommand": "sh ./gradlew build -x test",
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"vscjava.vscode-java-pack",
+				"vscjava.vscode-gradle"
+			],
+			"settings": {
+				"java.jdt.ls.java.home": "/usr/lib/jvm/zulu25",
+				"java.import.gradle.enabled": true,
+				"java.import.gradle.wrapper.enabled": true,
+				"java.import.gradle.java.home": "/usr/lib/jvm/zulu25",
+				"java.configuration.runtimes": [
+					{
+						"name": "JavaSE-25",
+						"path": "/usr/lib/jvm/zulu25",
+						"default": true
+					}
+				]
+			}
+		}
+	}
+}
