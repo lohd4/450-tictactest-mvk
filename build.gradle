@@ -1,6 +1,7 @@
 plugins {
 	id 'java'
 	id 'application'
+	id 'jacoco'
 }
 
 repositories {
@@ -19,7 +20,56 @@ dependencies {
 
 test {
 	useJUnitPlatform()
+	finalizedBy jacocoTestReport // always produce a coverage report after tests
 }
+
+jacoco {
+	toolVersion = '0.8.13'
+}
+
+// Intentionally excluded from coverage (see the test concept, doc/TESTKONZEPT.md):
+//   HumanPlayer - thin stdin wrapper, not unit-tested by design
+def coverageExclusions = ['**/players/HumanPlayer.class']
+
+jacocoTestReport {
+	dependsOn test
+	reports {
+		xml.required = true   // for CI / external tools
+		html.required = true  // for humans: build/reports/jacoco/test/html/index.html
+		csv.required = false
+	}
+	classDirectories.setFrom(classDirectories.files.collect {
+		fileTree(dir: it, exclude: coverageExclusions)
+	})
+}
+
+jacocoTestCoverageVerification {
+	dependsOn test
+	classDirectories.setFrom(classDirectories.files.collect {
+		fileTree(dir: it, exclude: coverageExclusions)
+	})
+	violationRules {
+		// overall floor so coverage cannot silently regress
+		// (currently ~0.83; raise as the planned TODO tests in the test concept land)
+		rule {
+			limit {
+				counter = 'LINE'
+				minimum = 0.80
+			}
+		}
+		// win detection is the heart of the game - nearly every branch must be hit
+		rule {
+			element = 'CLASS'
+			includes = ['ch.bbw.m450.tictactoe.TicTacToeMain']
+			limit {
+				counter = 'BRANCH'
+				minimum = 0.90
+			}
+		}
+	}
+}
+
+check.dependsOn jacocoTestCoverageVerification
 
 run {
 	standardInput = System.in
