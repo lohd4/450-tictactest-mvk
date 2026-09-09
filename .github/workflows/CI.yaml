@@ -16,7 +16,7 @@ jobs:
     outputs:
       image: ${{ steps.ref.outputs.image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Compute image ref for this branch
         id: ref
@@ -54,10 +54,11 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
     env:
       GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Cache Gradle packages
         uses: actions/cache@v4
