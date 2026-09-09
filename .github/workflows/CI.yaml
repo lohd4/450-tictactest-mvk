@@ -1,3 +1,5 @@
+name: CI
+
 on:
   push:
   pull_request:
@@ -6,17 +8,65 @@ on:
       - develop
 
 jobs:
-  build-and-test:
+  devcontainer-image:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.ref.outputs.image }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK
-        uses: actions/setup-java@v4
+      - name: Compute image ref for this branch
+        id: ref
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          slug=$(echo "${{ github.head_ref || github.ref_name }}" | sed 's#[^a-zA-Z0-9._-]#-#g')
+          echo "image=ghcr.io/$owner/tictactest-dev:$slug" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          java-version: '25'
-          distribution: 'zulu'
-          cache: 'gradle'
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .devcontainer
+          push: true
+          tags: ${{ steps.ref.outputs.image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-and-test:
+    needs: devcontainer-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ${{ needs.devcontainer-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/.gradle/caches
+            ${{ github.workspace }}/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
 
       - name: Build
         run: ./gradlew build -x test
