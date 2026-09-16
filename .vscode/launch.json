@@ -1,0 +1,13 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "java",
+			"name": "TicTacToeMain",
+			"request": "launch",
+			"mainClass": "ch.bbw.m450.tictactoe.TicTacToeMain",
+			"projectName": "450-tictactest-mvk",
+			"console": "integratedTerminal"
+		}
+	]
+}
