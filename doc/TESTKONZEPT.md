@@ -20,6 +20,23 @@
 
 ---
 
+## Audit: 
+  - Author: Kajinth
+  - Diskrepanz zwischen Priorisierung und Umsetzungsstand
+    Ausgerechnet das am höchsten priorisierte Robustheits-Ziel ist am wenigsten getestet. Daneben sind mehrere Ziel-Formulierungen deskriptiv statt normativ gehalten, was den Eindruck erweckt, bereits Erreichtes zu beschreiben, wo tatsächlich noch offene Punkte bestehen.
+  - Häufigkeit wann und von wem getestet wird.
+
+- Durchgängige Rückverfolgbarkeit von Qualitätszielen über Techniken bis zu
+  einzelnen Testfall-IDs, inklusive expliziter Matrix.
+- Begründete Nicht-Ziele und Abgrenzung statt stillschweigender
+  Lücken.
+- Bekannte Applikationsschwächen (z. B. `isWin(_, null)`) werden selbst
+  dokumentiert statt verschwiegen – für ein Testkonzept ungewöhnlich
+  und positiv zu werten.
+- Konkrete, prüfbare Grenzwerte und eine Entscheidungstabelle statt vager
+  Formulierungen.
+- CI ist fest im Prozess verankert, kein „nur lokal getestet“-Risiko.
+
 ## 1. Einleitung (Projekt, Version, Rollen)
 
 ### 1.1 Projekt
