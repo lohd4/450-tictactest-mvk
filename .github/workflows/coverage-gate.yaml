@@ -137,8 +137,8 @@ jobs:
           {
             echo "## Test Coverage Gate"
             echo ""
-            echo "| main | branch | Differenz | Ergebnis |"
-            echo "|------|--------|-----------|----------|"
+            echo "| main | branch | Diff | Result |"
+            echo "|------|--------|------|--------|"
             echo "| ${main} % | ${branch} % | ${sign}${diff} pp | ${result} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -169,11 +169,11 @@ jobs:
               "",
               `main: ${main} %`,
               `PR: ${branch} %`,
-              `Änderung: ${diff} Prozentpunkte`,
+              `Change: ${diff} percentage points`,
               "",
               result === "PASS"
-                ? "PASS - Coverage Gate bestanden"
-                : "FAIL - Coverage Gate nicht bestanden",
+                ? "PASS - Coverage gate passed"
+                : "FAIL - Coverage gate failed",
             ].join("\n");
 
             const { data: comments } = await github.rest.issues.listComments({
