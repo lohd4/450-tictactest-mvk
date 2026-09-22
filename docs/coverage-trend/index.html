@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coverage Trend</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --series-1:       #2a78d6;
+    --delta-good:     #006300;
+    --delta-bad:      #d03b3b;
+    --border:         rgba(11,11,11,0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --series-1:       #3987e5;
+      --delta-good:     #0ca30c;
+      --delta-bad:      #d03b3b;
+      --border:         rgba(255,255,255,0.10);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 20px 64px;
+  }
+
+  header.page-header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+
+  header.page-header p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 24px;
+  }
+
+  .hero-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 16px;
+    margin-bottom: 20px;
+  }
+
+  .hero-value {
+    font-size: 48px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .hero-delta {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .hero-delta.up { color: var(--delta-good); }
+  .hero-delta.down { color: var(--delta-bad); }
+  .hero-delta.flat { color: var(--text-muted); }
+
+  .hero-meta {
+    flex-basis: 100%;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .chart-scroll {
+    overflow-x: auto;
+  }
+
+  .chart-scroll svg {
+    display: block;
+    min-width: 480px;
+    width: 100%;
+    height: auto;
+  }
+
+  .axis-label {
+    fill: var(--text-muted);
+    font-size: 11px;
+  }
+
+  .gridline {
+    stroke: var(--gridline);
+    stroke-width: 1;
+  }
+
+  .baseline {
+    stroke: var(--baseline);
+    stroke-width: 1;
+  }
+
+  .series-line {
+    fill: none;
+    stroke: var(--series-1);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+
+  .series-dot {
+    fill: var(--series-1);
+    stroke: var(--surface-1);
+    stroke-width: 2;
+  }
+
+  .series-dot:focus {
+    outline: 2px solid var(--series-1);
+    outline-offset: 2px;
+  }
+
+  .hit-target {
+    fill: transparent;
+  }
+
+  .crosshair {
+    stroke: var(--baseline);
+    stroke-width: 1;
+    pointer-events: none;
+  }
+
+  .tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+  }
+
+  .tooltip .tt-value {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .tooltip .tt-meta {
+    color: var(--text-secondary);
+  }
+
+  .empty-state {
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  table.history-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 13px;
+  }
+
+  table.history-table th,
+  table.history-table td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--gridline);
+    font-variant-numeric: tabular-nums;
+  }
+
+  table.history-table th {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  details.table-toggle {
+    margin-top: 24px;
+  }
+
+  details.table-toggle summary {
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  footer.page-footer {
+    margin-top: 24px;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  footer.page-footer a {
+    color: inherit;
+  }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <div class="page">
+    <header class="page-header">
+      <h1>Test Coverage Trend &mdash; main</h1>
+      <p>Line coverage (JaCoCo) on every push to <code>main</code>.</p>
+    </header>
+
+    <div class="card" id="chart-card">
+      <div id="chart-content">
+        <p class="empty-state">Loading coverage history&hellip;</p>
+      </div>
+    </div>
+
+    <footer class="page-footer">
+      Data source: <code>coverage-history.csv</code>, appended by the CI workflow after each merge to <code>main</code>.
+    </footer>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  function parseCsv(text) {
+    var lines = text.split(/\r?\n/).filter(function (l) { return l.trim().length > 0; });
+    if (lines.length <= 1) return [];
+    var rows = [];
+    for (var i = 1; i < lines.length; i++) {
+      var parts = lines[i].split(",");
+      if (parts.length < 3) continue;
+      var date = parts[0].trim();
+      var commit = parts[1].trim();
+      var coverage = parseFloat(parts[2]);
+      if (!date || isNaN(coverage)) continue;
+      rows.push({ date: date, commit: commit, coverage: coverage });
+    }
+    return rows;
+  }
+
+  function niceTicks(min, max, count) {
+    var range = max - min || 1;
+    var rawStep = range / count;
+    var mag = Math.pow(10, Math.floor(Math.log(rawStep) / Math.LN10));
+    var residual = rawStep / mag;
+    var step;
+    if (residual > 5) step = 10 * mag;
+    else if (residual > 2) step = 5 * mag;
+    else if (residual > 1) step = 2 * mag;
+    else step = mag;
+    var niceMin = Math.floor(min / step) * step;
+    var niceMax = Math.ceil(max / step) * step;
+    var ticks = [];
+    for (var v = niceMin; v <= niceMax + step / 2; v += step) {
+      ticks.push(Math.round(v * 100) / 100);
+    }
+    return { ticks: ticks, min: niceMin, max: niceMax };
+  }
+
+  function fmtPct(v) {
+    return (Math.round(v * 10) / 10).toFixed(1) + "%";
+  }
+
+  function render(rows) {
+    var content = document.getElementById("chart-content");
+    content.textContent = "";
+
+    if (rows.length === 0) {
+      var p = document.createElement("p");
+      p.className = "empty-state";
+      p.textContent = "No coverage history yet. It will appear here after the next push to main.";
+      content.appendChild(p);
+      return;
+    }
+
+    var latest = rows[rows.length - 1];
+    var previous = rows.length > 1 ? rows[rows.length - 2] : null;
+
+    var heroRow = document.createElement("div");
+    heroRow.className = "hero-row";
+
+    var heroValue = document.createElement("span");
+    heroValue.className = "hero-value";
+    heroValue.textContent = fmtPct(latest.coverage);
+    heroRow.appendChild(heroValue);
+
+    if (previous) {
+      var delta = Math.round((latest.coverage - previous.coverage) * 10) / 10;
+      var deltaEl = document.createElement("span");
+      var cls = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
+      deltaEl.className = "hero-delta " + cls;
+      var sign = delta > 0 ? "+" : "";
+      deltaEl.textContent = sign + delta.toFixed(1) + " pp vs previous";
+      heroRow.appendChild(deltaEl);
+    }
+
+    var meta = document.createElement("span");
+    meta.className = "hero-meta";
+    meta.textContent = "As of " + latest.date + " · commit " + latest.commit;
+    heroRow.appendChild(meta);
+
+    content.appendChild(heroRow);
+
+    if (rows.length === 1) {
+      var single = document.createElement("p");
+      single.className = "empty-state";
+      single.textContent = "Only one data point so far — the trend line appears after the next push to main.";
+      content.appendChild(single);
+    } else {
+      content.appendChild(buildChart(rows));
+    }
+
+    content.appendChild(buildTable(rows));
+  }
+
+  function buildChart(rows) {
+    var scroll = document.createElement("div");
+    scroll.className = "chart-scroll";
+
+    var width = 840, height = 320;
+    var margin = { top: 16, right: 16, bottom: 36, left: 44 };
+    var plotW = width - margin.left - margin.right;
+    var plotH = height - margin.top - margin.bottom;
+
+    var values = rows.map(function (r) { return r.coverage; });
+    var dataMin = Math.min.apply(null, values);
+    var dataMax = Math.max.apply(null, values);
+    var pad = Math.max((dataMax - dataMin) * 0.15, 2);
+    var scale = niceTicks(Math.max(dataMin - pad, 0), Math.min(dataMax + pad, 100), 4);
+
+    function xAt(i) {
+      return rows.length === 1 ? plotW / 2 : (i / (rows.length - 1)) * plotW;
+    }
+    function yAt(v) {
+      return plotH - ((v - scale.min) / (scale.max - scale.min)) * plotH;
+    }
+
+    var svgNS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Line chart of test coverage over time, from " + fmtPct(values[0]) + " to " + fmtPct(values[values.length - 1]));
+
+    var plot = document.createElementNS(svgNS, "g");
+    plot.setAttribute("transform", "translate(" + margin.left + "," + margin.top + ")");
+    svg.appendChild(plot);
+
+    scale.ticks.forEach(function (t) {
+      var y = yAt(t);
+      var line = document.createElementNS(svgNS, "line");
+      line.setAttribute("class", "gridline");
+      line.setAttribute("x1", 0);
+      line.setAttribute("x2", plotW);
+      line.setAttribute("y1", y);
+      line.setAttribute("y2", y);
+      plot.appendChild(line);
+
+      var label = document.createElementNS(svgNS, "text");
+      label.setAttribute("class", "axis-label");
+      label.setAttribute("x", -8);
+      label.setAttribute("y", y + 4);
+      label.setAttribute("text-anchor", "end");
+      label.textContent = Math.round(t) + "%";
+      plot.appendChild(label);
+    });
+
+    var baseline = document.createElementNS(svgNS, "line");
+    baseline.setAttribute("class", "baseline");
+    baseline.setAttribute("x1", 0);
+    baseline.setAttribute("x2", plotW);
+    baseline.setAttribute("y1", plotH);
+    baseline.setAttribute("y2", plotH);
+    plot.appendChild(baseline);
+
+    var maxLabels = 8;
+    var labelStride = Math.max(1, Math.ceil(rows.length / maxLabels));
+    rows.forEach(function (r, i) {
+      if (i % labelStride !== 0 && i !== rows.length - 1) return;
+      var label = document.createElementNS(svgNS, "text");
+      label.setAttribute("class", "axis-label");
+      label.setAttribute("x", xAt(i));
+      label.setAttribute("y", plotH + 20);
+      var anchor = i === 0 ? "start" : i === rows.length - 1 ? "end" : "middle";
+      label.setAttribute("text-anchor", anchor);
+      label.textContent = r.date;
+      plot.appendChild(label);
+    });
+
+    var points = rows.map(function (r, i) { return [xAt(i), yAt(r.coverage)]; });
+    var d = points.map(function (p, i) {
+      return (i === 0 ? "M" : "L") + p[0].toFixed(2) + "," + p[1].toFixed(2);
+    }).join(" ");
+    var path = document.createElementNS(svgNS, "path");
+    path.setAttribute("class", "series-line");
+    path.setAttribute("d", d);
+    plot.appendChild(path);
+
+    var crosshair = document.createElementNS(svgNS, "line");
+    crosshair.setAttribute("class", "crosshair");
+    crosshair.setAttribute("y1", 0);
+    crosshair.setAttribute("y2", plotH);
+    crosshair.style.opacity = "0";
+    plot.appendChild(crosshair);
+
+    var tooltip = document.getElementById("tooltip");
+
+    function showTooltip(i, clientAnchor) {
+      var r = rows[i];
+      var p = points[i];
+      crosshair.setAttribute("x1", p[0]);
+      crosshair.setAttribute("x2", p[0]);
+      crosshair.style.opacity = "1";
+
+      tooltip.textContent = "";
+      var valueEl = document.createElement("div");
+      valueEl.className = "tt-value";
+      valueEl.textContent = fmtPct(r.coverage);
+      var metaEl = document.createElement("div");
+      metaEl.className = "tt-meta";
+      metaEl.textContent = r.date + " · " + r.commit;
+      tooltip.appendChild(valueEl);
+      tooltip.appendChild(metaEl);
+      tooltip.style.opacity = "1";
+
+      var rect = svg.getBoundingClientRect();
+      var scaleX = rect.width / width;
+      var scaleY = rect.height / height;
+      var px = rect.left + window.scrollX + (margin.left + p[0]) * scaleX;
+      var py = rect.top + window.scrollY + (margin.top + p[1]) * scaleY;
+      tooltip.style.left = px + 12 + "px";
+      tooltip.style.top = py - 12 + "px";
+    }
+
+    function hideTooltip() {
+      crosshair.style.opacity = "0";
+      tooltip.style.opacity = "0";
+    }
+
+    points.forEach(function (p, i) {
+      var dot = document.createElementNS(svgNS, "circle");
+      dot.setAttribute("class", "series-dot");
+      dot.setAttribute("cx", p[0]);
+      dot.setAttribute("cy", p[1]);
+      dot.setAttribute("r", 4);
+      plot.appendChild(dot);
+
+      var hit = document.createElementNS(svgNS, "circle");
+      hit.setAttribute("class", "hit-target");
+      hit.setAttribute("cx", p[0]);
+      hit.setAttribute("cy", p[1]);
+      hit.setAttribute("r", 14);
+      hit.setAttribute("tabindex", "0");
+      hit.setAttribute("role", "img");
+      hit.setAttribute("aria-label", rows[i].date + ", " + fmtPct(rows[i].coverage) + ", commit " + rows[i].commit);
+      hit.addEventListener("pointerenter", function () { showTooltip(i); });
+      hit.addEventListener("focus", function () { showTooltip(i); });
+      hit.addEventListener("blur", hideTooltip);
+      plot.appendChild(hit);
+    });
+
+    svg.addEventListener("pointermove", function (evt) {
+      var rect = svg.getBoundingClientRect();
+      var scaleX = rect.width / width;
+      var localX = (evt.clientX - rect.left) / scaleX - margin.left;
+      var nearest = 0;
+      var best = Infinity;
+      points.forEach(function (p, i) {
+        var dist = Math.abs(p[0] - localX);
+        if (dist < best) { best = dist; nearest = i; }
+      });
+      showTooltip(nearest);
+    });
+    svg.addEventListener("pointerleave", hideTooltip);
+
+    scroll.appendChild(svg);
+    return scroll;
+  }
+
+  function buildTable(rows) {
+    var details = document.createElement("details");
+    details.className = "table-toggle";
+    var summary = document.createElement("summary");
+    summary.textContent = "Show data as table (" + rows.length + " entries)";
+    details.appendChild(summary);
+
+    var table = document.createElement("table");
+    table.className = "history-table";
+    var thead = document.createElement("thead");
+    var headRow = document.createElement("tr");
+    ["Datum", "Commit", "Coverage"].forEach(function (h) {
+      var th = document.createElement("th");
+      th.textContent = h;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement("tbody");
+    rows.slice().reverse().forEach(function (r) {
+      var tr = document.createElement("tr");
+      var tdDate = document.createElement("td");
+      tdDate.textContent = r.date;
+      var tdCommit = document.createElement("td");
+      tdCommit.textContent = r.commit;
+      var tdCov = document.createElement("td");
+      tdCov.textContent = fmtPct(r.coverage);
+      tr.appendChild(tdDate);
+      tr.appendChild(tdCommit);
+      tr.appendChild(tdCov);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+
+    details.appendChild(table);
+    return details;
+  }
+
+  fetch("coverage-history.csv", { cache: "no-store" })
+    .then(function (res) {
+      if (!res.ok) throw new Error("fetch failed");
+      return res.text();
+    })
+    .then(function (text) { render(parseCsv(text)); })
+    .catch(function () { render([]); });
+})();
+</script>
+</body>
+</html>
