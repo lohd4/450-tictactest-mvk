@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches-ignore:
+      - gh-pages
   pull_request:
     branches:
       - main
@@ -71,3 +73,63 @@ jobs:
         with:
           name: jacoco-report
           path: build/reports/jacoco/test/
+
+  coverage-trend:
+    name: Publish coverage trend to GitHub Pages
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: coverage-trend-gh-pages
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-report
+          path: coverage-report
+
+      - name: Determine current line coverage
+        id: coverage
+        run: |
+          python3 - <<'PYEOF' >> "$GITHUB_OUTPUT"
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("coverage-report/jacocoTestReport.xml").getroot()
+          for counter in root.findall("counter"):
+              if counter.get("type") == "LINE":
+                  covered = int(counter.get("covered"))
+                  missed = int(counter.get("missed"))
+                  pct = round(covered / (covered + missed) * 100, 1)
+                  print(f"value={pct}")
+                  break
+          PYEOF
+
+      - name: Assemble site with updated coverage history
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          cp docs/coverage-trend/index.html site/index.html
+
+          if git ls-remote --exit-code --heads origin gh-pages > /dev/null 2>&1; then
+            git fetch origin gh-pages --depth=1
+            git show origin/gh-pages:coverage-history.csv > site/coverage-history.csv 2>/dev/null || echo "Datum,Commit,Coverage" > site/coverage-history.csv
+          else
+            echo "Datum,Commit,Coverage" > site/coverage-history.csv
+          fi
+
+          echo "$(date -u +%Y-%m-%d),${GITHUB_SHA::7},${{ steps.coverage.outputs.value }}" >> site/coverage-history.csv
+
+      - name: Deploy to GitHub Pages (gh-pages branch)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          publish_branch: gh-pages
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'chore: update coverage trend (${{ github.sha }})'
