@@ -127,4 +127,6 @@ jobs:
           COVERAGE_DIFF: ${{ steps.evaluate.outputs.diff }}
           COVERAGE_RESULT: ${{ steps.evaluate.outputs.result }}
         with:
-          script-path: .github/scripts/comment-coverage.js
+          script: |
+            const commentCoverage = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/comment-coverage.js`);
+            await commentCoverage({ github, context });
