@@ -1,9 +1,15 @@
 name: Dev container image
 
 # Builds .devcontainer/Dockerfile and pushes it to GHCR as
-#   ghcr.io/<owner>/tictactest-dev:<branch-slug>   (every branch)
+#   ghcr.io/<owner>/tictactest-dev:<branch-slug>   (every branch - unreleased/dev image)
 #   ghcr.io/<owner>/tictactest-dev:latest          (default branch only)
+#   ghcr.io/<owner>/tictactest-dev:<vX.Y.Z>        (default branch only - the next release)
 # Only runs when the dev container definition actually changes.
+#
+# On the default branch, a successful push also bumps .devcontainer/VERSION
+# and opens a pull request for that bump. The image is already in GHCR at
+# that point, but nothing is "officially released" until that PR is reviewed
+# and merged - see doc/DEVCONTAINER_VERSIONING.md.
 
 on:
   push:
@@ -17,7 +23,8 @@ jobs:
   build-and-push:
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      contents: write
+      pull-requests: write
       packages: write
     steps:
       - uses: actions/checkout@v5
@@ -31,6 +38,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Determine next release version
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        id: version
+        run: bash .github/scripts/next-devcontainer-version.sh .devcontainer/VERSION
+
       - name: Image tags
         id: meta
         uses: docker/metadata-action@v5
@@ -40,12 +52,39 @@ jobs:
             type=ref,event=branch
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Combine image tags
+        id: tags
+        env:
+          META_TAGS: ${{ steps.meta.outputs.tags }}
+          RELEASE_OWNER: ${{ steps.version.outputs.owner }}
+          RELEASE_VERSION: ${{ steps.version.outputs.new_version }}
+        run: bash .github/scripts/combine-devcontainer-tags.sh
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .devcontainer
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.tags.outputs.list }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Open version bump pull request
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          add-paths: .devcontainer/VERSION
+          branch: devcontainer-release/${{ steps.version.outputs.new_version }}
+          commit-message: "chore(devcontainer): release ${{ steps.version.outputs.new_version }}"
+          title: "chore(devcontainer): release ${{ steps.version.outputs.new_version }}"
+          body: |
+            Automated dev container release.
+
+            - Previous version: `${{ steps.version.outputs.old_version }}`
+            - New version: `${{ steps.version.outputs.new_version }}`
+            - Image: `ghcr.io/${{ steps.version.outputs.owner }}/tictactest-dev:${{ steps.version.outputs.new_version }}`
+
+            The image is already pushed to GHCR. Merging this PR marks it as the
+            officially released dev container version.
