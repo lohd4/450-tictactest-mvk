@@ -11,12 +11,14 @@ on:
 
 jobs:
   resolve-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       packages: read
     outputs:
       image: ${{ steps.pick.outputs.image }}
     steps:
+      - uses: actions/checkout@v5
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -26,23 +28,15 @@ jobs:
 
       - name: Pick image tag
         id: pick
-        run: |
-          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          repo="ghcr.io/$owner/tictactest-dev"
-          slug=$(echo "${{ github.head_ref || github.ref_name }}" | sed 's#[^a-zA-Z0-9._-]#-#g')
-          for tag in "$slug" "${{ github.event.repository.default_branch }}" latest; do
-            if docker manifest inspect "$repo:$tag" >/dev/null 2>&1; then
-              echo "image=$repo:$tag" >> "$GITHUB_OUTPUT"
-              echo "Using $repo:$tag"
-              exit 0
-            fi
-          done
-          echo "::error::No dev container image in GHCR yet. Run the 'Dev container image' workflow (Actions tab -> Run workflow), or push a change under .devcontainer/."
-          exit 1
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          BRANCH_REF: ${{ github.head_ref || github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: bash .github/scripts/resolve-image.sh
 
   build-and-test:
     needs: resolve-image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: read
@@ -78,7 +72,7 @@ jobs:
     name: Publish coverage trend to GitHub Pages
     needs: build-and-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: coverage-trend-gh-pages
       cancel-in-progress: false
@@ -95,34 +89,12 @@ jobs:
 
       - name: Determine current line coverage
         id: coverage
-        run: |
-          python3 - <<'PYEOF' >> "$GITHUB_OUTPUT"
-          import xml.etree.ElementTree as ET
-
-          root = ET.parse("coverage-report/jacocoTestReport.xml").getroot()
-          for counter in root.findall("counter"):
-              if counter.get("type") == "LINE":
-                  covered = int(counter.get("covered"))
-                  missed = int(counter.get("missed"))
-                  pct = round(covered / (covered + missed) * 100, 1)
-                  print(f"value={pct}")
-                  break
-          PYEOF
+        run: python3 .github/scripts/coverage-from-jacoco.py coverage-report/jacocoTestReport.xml >> "$GITHUB_OUTPUT"
 
       - name: Assemble site with updated coverage history
-        run: |
-          set -euo pipefail
-          mkdir -p site
-          cp docs/coverage-trend/index.html site/index.html
-
-          if git ls-remote --exit-code --heads origin gh-pages > /dev/null 2>&1; then
-            git fetch origin gh-pages --depth=1
-            git show origin/gh-pages:coverage-history.csv > site/coverage-history.csv 2>/dev/null || echo "Datum,Commit,Coverage" > site/coverage-history.csv
-          else
-            echo "Datum,Commit,Coverage" > site/coverage-history.csv
-          fi
-
-          echo "$(date -u +%Y-%m-%d),${GITHUB_SHA::7},${{ steps.coverage.outputs.value }}" >> site/coverage-history.csv
+        env:
+          COVERAGE_VALUE: ${{ steps.coverage.outputs.value }}
+        run: bash .github/scripts/assemble-coverage-site.sh
 
       - name: Deploy to GitHub Pages (gh-pages branch)
         uses: peaceiris/actions-gh-pages@v4
