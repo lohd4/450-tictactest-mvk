@@ -8,12 +8,14 @@ on:
 
 jobs:
   resolve-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       packages: read
     outputs:
       image: ${{ steps.pick.outputs.image }}
     steps:
+      - uses: actions/checkout@v5
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -23,24 +25,16 @@ jobs:
 
       - name: Pick image tag
         id: pick
-        run: |
-          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          repo="ghcr.io/$owner/tictactest-dev"
-          slug=$(echo "${{ github.head_ref || github.ref_name }}" | sed 's#[^a-zA-Z0-9._-]#-#g')
-          for tag in "$slug" "${{ github.event.repository.default_branch }}" latest; do
-            if docker manifest inspect "$repo:$tag" >/dev/null 2>&1; then
-              echo "image=$repo:$tag" >> "$GITHUB_OUTPUT"
-              echo "Using $repo:$tag"
-              exit 0
-            fi
-          done
-          echo "::error::No dev container image in GHCR yet. Run the 'Dev container image' workflow (Actions tab -> Run workflow), or push a change under .devcontainer/."
-          exit 1
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          BRANCH_REF: ${{ github.head_ref || github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: bash .github/scripts/resolve-image.sh
 
   coverage-main:
     name: Coverage of main
     needs: resolve-image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: read
@@ -68,19 +62,12 @@ jobs:
 
       - name: Determine line coverage
         id: coverage
-        run: |
-          xml="build/reports/jacoco/test/jacocoTestReport.xml"
-          entry=$(grep -o '<counter type="LINE" missed="[0-9]*" covered="[0-9]*"/>' "$xml" | tail -n 1)
-          missed=$(echo "$entry" | sed -E 's/.*missed="([0-9]+)".*/\1/')
-          covered=$(echo "$entry" | sed -E 's/.*covered="([0-9]+)".*/\1/')
-          total=$((covered + missed))
-          scaled=$(( (covered * 1000 + total / 2) / total ))
-          echo "value=$((scaled / 10)).$((scaled % 10))" >> "$GITHUB_OUTPUT"
+        run: bash .github/scripts/jacoco-line-coverage.sh build/reports/jacoco/test/jacocoTestReport.xml
 
   coverage-branch:
     name: Coverage of branch
     needs: resolve-image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: read
@@ -106,95 +93,31 @@ jobs:
 
       - name: Determine line coverage
         id: coverage
-        run: |
-          xml="build/reports/jacoco/test/jacocoTestReport.xml"
-          entry=$(grep -o '<counter type="LINE" missed="[0-9]*" covered="[0-9]*"/>' "$xml" | tail -n 1)
-          missed=$(echo "$entry" | sed -E 's/.*missed="([0-9]+)".*/\1/')
-          covered=$(echo "$entry" | sed -E 's/.*covered="([0-9]+)".*/\1/')
-          total=$((covered + missed))
-          scaled=$(( (covered * 1000 + total / 2) / total ))
-          echo "value=$((scaled / 10)).$((scaled % 10))" >> "$GITHUB_OUTPUT"
+        run: bash .github/scripts/jacoco-line-coverage.sh build/reports/jacoco/test/jacocoTestReport.xml
 
   gate:
     name: Evaluate coverage gate
     needs: [coverage-main, coverage-branch]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       pull-requests: write
     steps:
+      - uses: actions/checkout@v5
+
       - name: Compare coverage
         id: evaluate
-        run: |
-          main="${{ needs.coverage-main.outputs.value }}"
-          branch="${{ needs.coverage-branch.outputs.value }}"
-
-          diff=$(awk -v m="$main" -v b="$branch" 'BEGIN { printf "%.1f", b - m }')
-          pass=$(awk -v m="$main" -v b="$branch" 'BEGIN { print (b >= m) ? "1" : "0" }')
-          sign=$(awk -v d="$diff" 'BEGIN { print (d >= 0) ? "+" : "" }')
-          result="FAIL"
-          [ "$pass" = "1" ] && result="PASS"
-
-          {
-            echo "## Test Coverage Gate"
-            echo ""
-            echo "| main | branch | Diff | Result |"
-            echo "|------|--------|------|--------|"
-            echo "| ${main} % | ${branch} % | ${sign}${diff} pp | ${result} |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          echo "main=$main" >> "$GITHUB_OUTPUT"
-          echo "branch=$branch" >> "$GITHUB_OUTPUT"
-          echo "diff=${sign}${diff}" >> "$GITHUB_OUTPUT"
-          echo "result=$result" >> "$GITHUB_OUTPUT"
-
-          if [ "$result" = "FAIL" ]; then
-            echo "::error::Branch coverage (${branch}%) is lower than main (${main}%)."
-            exit 1
-          fi
+        env:
+          COVERAGE_MAIN: ${{ needs.coverage-main.outputs.value }}
+          COVERAGE_BRANCH: ${{ needs.coverage-branch.outputs.value }}
+        run: bash .github/scripts/compare-coverage.sh
 
       - name: Comment on pull request
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
+        env:
+          COVERAGE_MAIN: ${{ steps.evaluate.outputs.main }}
+          COVERAGE_BRANCH: ${{ steps.evaluate.outputs.branch }}
+          COVERAGE_DIFF: ${{ steps.evaluate.outputs.diff }}
+          COVERAGE_RESULT: ${{ steps.evaluate.outputs.result }}
         with:
-          script: |
-            const marker = "<!-- coverage-gate-report -->";
-            const main = "${{ steps.evaluate.outputs.main }}";
-            const branch = "${{ steps.evaluate.outputs.branch }}";
-            const diff = "${{ steps.evaluate.outputs.diff }}";
-            const result = "${{ steps.evaluate.outputs.result }}";
-
-            const body = [
-              marker,
-              "Test Coverage",
-              "",
-              `main: ${main} %`,
-              `PR: ${branch} %`,
-              `Change: ${diff} percentage points`,
-              "",
-              result === "PASS"
-                ? "PASS - Coverage gate passed"
-                : "FAIL - Coverage gate failed",
-            ].join("\n");
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find((c) => c.body && c.body.includes(marker));
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
+          script-path: .github/scripts/comment-coverage.js
