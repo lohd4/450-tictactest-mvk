@@ -47,22 +47,29 @@ jobs:
     outputs:
       value: ${{ steps.coverage.outputs.value }}
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout PR branch (for .github/scripts)
+        uses: actions/checkout@v5
+
+      - name: Checkout main
+        uses: actions/checkout@v5
         with:
           ref: main
+          path: main-src
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Test
+        working-directory: main-src
         run: ./gradlew test
 
       - name: Coverage report
+        working-directory: main-src
         run: ./gradlew jacocoTestReport
 
       - name: Determine line coverage
         id: coverage
-        run: bash .github/scripts/jacoco-line-coverage.sh build/reports/jacoco/test/jacocoTestReport.xml
+        run: bash .github/scripts/jacoco-line-coverage.sh main-src/build/reports/jacoco/test/jacocoTestReport.xml
 
   coverage-branch:
     name: Coverage of branch
