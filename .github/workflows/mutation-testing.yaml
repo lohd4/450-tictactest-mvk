@@ -1,0 +1,88 @@
+name: Mutation Testing
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  resolve-image:
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: read
+    outputs:
+      image: ${{ steps.pick.outputs.image }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pick image tag
+        id: pick
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          BRANCH_REF: ${{ github.head_ref || github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: bash .github/scripts/resolve-image.sh
+
+  mutation-test:
+    name: Run PIT mutation testing
+    needs: resolve-image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: write
+    container:
+      image: ${{ needs.resolve-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run mutation tests
+        run: ./gradlew pitest
+
+      - name: Summarize mutation score
+        id: summary
+        run: bash .github/scripts/pitest-summary.sh build/reports/pitest/mutations.xml
+
+      - name: Write job summary
+        run: |
+          {
+            echo "## Mutation Testing (PIT)"
+            echo ""
+            echo "| Mutations | Killed | Score |"
+            echo "|-----------|--------|-------|"
+            echo "| ${{ steps.summary.outputs.total }} | ${{ steps.summary.outputs.killed }} | ${{ steps.summary.outputs.score }} % |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pitest-report
+          path: build/reports/pitest/
+
+      - name: Comment on pull request
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          MUTATION_TOTAL: ${{ steps.summary.outputs.total }}
+          MUTATION_KILLED: ${{ steps.summary.outputs.killed }}
+          MUTATION_SCORE: ${{ steps.summary.outputs.score }}
+        with:
+          script: |
+            const commentMutation = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/comment-mutation.js`);
+            await commentMutation({ github, context });

@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'application'
 	id 'jacoco'
+	id 'info.solidsoft.pitest' version '1.19.0'
 }
 
 repositories {
@@ -77,6 +78,15 @@ jacocoTestCoverageVerification {
 }
 
 check.dependsOn jacocoTestCoverageVerification
+
+pitest {
+	pitestVersion = '1.30.0'     
+	junit5PluginVersion = '1.2.3'
+	targetClasses = ['ch.bbw.m450.tictactoe.*']
+	excludedClasses = ['ch.bbw.m450.tictactoe.players.HumanPlayer']
+	outputFormats = ['HTML', 'XML']
+	timestampedReports = false
+}
 
 run {
 	standardInput = System.in
