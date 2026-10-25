@@ -23,20 +23,37 @@ application {
 dependencies {
 	testImplementation 'org.assertj:assertj-core:3.27.7'
 	testImplementation 'org.junit.jupiter:junit-jupiter:6.1.3'
+	testImplementation 'org.junit-pioneer:junit-pioneer:3.0.0-RC1'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 test {
-	useJUnitPlatform()
+	useJUnitPlatform {
+		excludeTags 'e2e' // E2E tests run separately via the `e2eTest` task, see below
+	}
 	finalizedBy jacocoTestReport // always produce a coverage report after tests
 }
+
+// End-to-end tests (full game flow via real stdin/stdout, invalid/malicious input, DoS probes)
+// live alongside the other tests but are tagged "e2e" and run through their own Gradle task,
+// `test` is a fast unit/integration run. See doc/TESTKONZEPT.md
+tasks.register('e2eTest', Test) {
+	description = 'Runs the end-to-end test suite (full game flow, invalid/malicious input, DoS probes).'
+	group = 'verification'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform {
+		includeTags 'e2e'
+	}
+}
+
+check.dependsOn e2eTest
 
 jacoco {
 	toolVersion = '0.8.13'
 }
 
-// Intentionally excluded from coverage (see the test concept, doc/TESTKONZEPT.md):
-//   HumanPlayer - thin stdin wrapper, not unit-tested by design
+// Intentionally excluded from this coverage gate (see doc/TESTKONZEPT.md):
 def coverageExclusions = ['**/players/HumanPlayer.class']
 
 jacocoTestReport {
