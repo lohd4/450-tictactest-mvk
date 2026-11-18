@@ -50,6 +50,22 @@ class TicTacToeE2ETest implements WithAssertions {
         assertThat(out.capturedString()).as("the winner is announced on stdout").contains("winner is: CROSS");
     }
 
+    @StdIo({"0", "2", "4", "6"})
+    @Test
+    void givenNoArguments_whenMainIsInvoked_thenAFullGameIsPlayedFromStdin(StdOut out) {
+        // GIVEN the shipped entry point invoked the way `java -jar tictactest-<version>.jar` does,
+        //       i.e. without arguments (the released artefact's default behaviour, see RELEASE.md)
+        // WHEN main runs with the winning anti-diagonal trace on stdin
+        TicTacToeMain.main(new String[0]);
+
+        // THEN a complete game is played and the winner announced - main really starts the game
+        assertThat(out.capturedString())
+                .as("no arguments must start a game, not print the version")
+                .contains("where to put the next CROSS?")
+                .contains("winner is: CROSS")
+                .doesNotContain("TicTacTest ");
+    }
+
     @StdIo({"3", "5", "6"})
     @Test
     void givenMovesViaStdin_whenPlayingFullGame_thenCircleWinsTopRow(StdOut out) {

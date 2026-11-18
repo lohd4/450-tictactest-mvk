@@ -9,6 +9,15 @@ repositories {
 	mavenCentral()
 }
 
+// The git tag is the single source of truth for the release version: tag `v1.0.0`
+// produces `tictactest-1.0.0.jar`. The release workflow passes the pushed tag in
+// RELEASE_VERSION; locally the tag on HEAD is used. See RELEASE.md.
+version = resolveReleaseVersion()
+
+base {
+	archivesName = 'tictactest' // -> build/libs/tictactest-<version>.jar
+}
+
 java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(25)
@@ -18,6 +27,18 @@ java {
 
 application {
 	mainClass = 'ch.bbw.m450.tictactoe.TicTacToeMain'
+}
+
+// Makes the jar runnable via `java -jar`. The project has no runtime dependencies,
+// so the plain jar is already self-contained - no shadow/fat-jar plugin needed.
+// Implementation-Version is what `java -jar tictactest-<version>.jar --version` prints.
+jar {
+	manifest {
+		attributes(
+				'Main-Class': application.mainClass.get(),
+				'Implementation-Title': 'TicTacTest',
+				'Implementation-Version': project.version)
+	}
 }
 
 dependencies {
@@ -107,4 +128,31 @@ pitest {
 
 run {
 	standardInput = System.in
+}
+
+/**
+ * Resolves the version this build produces, in order of precedence:
+ *   1. RELEASE_VERSION  - set by .github/workflows/release.yaml from the pushed tag
+ *   2. the annotated git tag pointing exactly at HEAD (local release builds)
+ *   3. 0.0.0-SNAPSHOT   - any ordinary development build
+ * A leading "v" is stripped, so tag `v1.0.0` becomes version `1.0.0`.
+ */
+def resolveReleaseVersion() {
+	def fromEnv = System.getenv('RELEASE_VERSION')
+	if (fromEnv?.trim()) {
+		return fromEnv.trim().replaceFirst(/^v/, '')
+	}
+	try {
+		def process = new ProcessBuilder('git', 'describe', '--tags', '--exact-match')
+				.directory(projectDir)
+				.redirectError(ProcessBuilder.Redirect.DISCARD)
+				.start()
+		def tag = process.inputStream.text.trim()
+		if (process.waitFor() == 0 && tag) {
+			return tag.replaceFirst(/^v/, '')
+		}
+	} catch (Exception ignored) {
+		// no git (or no tag) available -> fall through to the snapshot version
+	}
+	return '0.0.0-SNAPSHOT'
 }

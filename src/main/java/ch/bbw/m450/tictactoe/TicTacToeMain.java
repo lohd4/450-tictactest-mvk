@@ -13,8 +13,77 @@ public class TicTacToeMain {
 
 	public static final int BOARD_SIZE = 9;
 
+	/** Shown when no version is baked into the manifest, i.e. when not running from a released jar. */
+	static final String DEVELOPMENT_VERSION = "development build";
+
+	/** What the application prints for {@code --help}. */
+	static final String USAGE = """
+			TicTacToe - play against a simple computer opponent.
+
+			Usage: java -jar tictactest-<version>.jar [option]
+
+			Options:
+			  (none)           start a game; you are X and enter field numbers 0-8
+			  --help,    -h    show this help and exit
+			  --version, -v    show the version and exit
+
+			The board fields are numbered left to right, top to bottom:
+			  0 | 1 | 2
+			 ---+---+---
+			  3 | 4 | 5
+			 ---+---+---
+			  6 | 7 | 8""";
+
 	public static void main(String[] args) {
+		if (isVersionRequest(args)) {
+			System.out.println(versionInfo());
+			return;
+		}
+		if (isHelpRequest(args)) {
+			System.out.println(USAGE);
+			return;
+		}
 		play(new HumanPlayer(), new GreedyPlayer());
+	}
+
+	/**
+	 * @param args the raw command line arguments
+	 * @return true if the caller asked for the version instead of a game
+	 */
+	static boolean isVersionRequest(String[] args) {
+		return isFirstArgument(args, "--version", "-v");
+	}
+
+	/**
+	 * @param args the raw command line arguments
+	 * @return true if the caller asked for the usage text instead of a game
+	 */
+	static boolean isHelpRequest(String[] args) {
+		return isFirstArgument(args, "--help", "-h");
+	}
+
+	private static boolean isFirstArgument(String[] args, String longFlag, String shortFlag) {
+		return args != null && args.length > 0 && (longFlag.equals(args[0]) || shortFlag.equals(args[0]));
+	}
+
+	/**
+	 * @return the human readable version of this build, e.g. "TicTacTest 1.0.0". The version is read
+	 *         from the jar manifest's Implementation-Version, which the build fills from the git tag
+	 *         (see RELEASE.md); outside a jar there is no manifest, hence the development fallback.
+	 */
+	static String versionInfo() {
+		return versionInfo(TicTacToeMain.class.getPackage()
+				.getImplementationVersion());
+	}
+
+	/**
+	 * @param manifestVersion the Implementation-Version from the jar manifest, or null when running
+	 *        outside a jar (plain classes have no manifest)
+	 * @return the version line to print
+	 */
+	static String versionInfo(String manifestVersion) {
+		return "TicTacTest " + (manifestVersion == null || manifestVersion.isBlank() ? DEVELOPMENT_VERSION
+				: manifestVersion);
 	}
 
 	/**
