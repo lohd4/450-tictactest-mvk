@@ -1,0 +1,166 @@
+name: Deploy
+
+# Deployment happens for a RELEASE, never for a push.
+#
+#   workflow_call      release.yaml calls this once the release exists, so a
+#                      tag deploys exactly the artefacts it just published.
+#                      (A `release:` trigger would not work: events raised by
+#                      GITHUB_TOKEN do not start other workflows.)
+#   workflow_dispatch  deploy any already-published version on purpose -
+#                      rollback, or rebuilding the environment after a
+#                      tofu destroy / apply.
+#
+# There is deliberately no `push:` trigger of any kind.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to deploy, without the v (e.g. 1.3.0)'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Published version to (re)deploy, e.g. 1.2.0 — deploys backend AND frontend'
+        required: true
+        type: string
+
+# Two deployments must never run at once: they would fight over the same
+# instance and the same bucket, and the version check of the slower one would
+# see the other one's result. Queued, not cancelled - a half-finished
+# deployment is worse than a late one.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  plan:
+    name: What needs deploying?
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.decide.outputs.version }}
+      backend: ${{ steps.decide.outputs.backend }}
+      frontend: ${{ steps.decide.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Change detection needs the full tag history; the default shallow
+          # clone has neither the previous tag nor the commits in between.
+          fetch-depth: 0
+
+      - name: Decide
+        id: decide
+        env:
+          VERSION: ${{ inputs.version }}
+          IS_MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          version="${VERSION#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          if [ "$IS_MANUAL" = "true" ]; then
+            # A manual deployment is an explicit "put this version there":
+            # the environment may be in any state, so never skip a half.
+            echo "manual deployment of $version - deploying both halves"
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+          else
+            bash .github/scripts/detect-changes.sh "v$version"
+          fi
+
+      - name: Summary
+        env:
+          V: ${{ steps.decide.outputs.version }}
+          B: ${{ steps.decide.outputs.backend }}
+          F: ${{ steps.decide.outputs.frontend }}
+        run: |
+          {
+            echo "### Deployment plan for \`$V\`"
+            echo ""
+            echo "| Teil | Aktion |"
+            echo "| --- | --- |"
+            echo "| Backend | $([ "$B" = true ] && echo 'wird deployt' || echo 'unverändert') |"
+            echo "| Frontend | $([ "$F" = true ] && echo 'wird deployt' || echo 'unverändert') |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  backend:
+    name: Backend
+    needs: plan
+    if: needs.plan.outputs.backend == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # Learner Lab credentials are temporary and include a session token.
+          # They are Secrets (they grant access); the region and the resource
+          # identifiers below are Variables (they are not sensitive).
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Deploy jar and verify the running version
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          ARTIFACTS_BUCKET: ${{ vars.ARTIFACTS_BUCKET }}
+          INSTANCE_ID: ${{ vars.INSTANCE_ID }}
+          VERSION_URL: ${{ vars.VERSION_URL }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          REPO: ${{ github.repository }}
+        run: bash .github/scripts/deploy-backend.sh
+
+  frontend:
+    name: Frontend
+    needs: plan
+    if: needs.plan.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Deploy frontend and verify what is served
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          FRONTEND_BUCKET: ${{ vars.FRONTEND_BUCKET }}
+          PLAY_URL: ${{ vars.PLAY_URL }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          REPO: ${{ github.repository }}
+        run: bash .github/scripts/deploy-frontend.sh
+
+  done:
+    name: Result
+    needs: [plan, backend, frontend]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report
+        env:
+          V: ${{ needs.plan.outputs.version }}
+          B: ${{ needs.backend.result }}
+          F: ${{ needs.frontend.result }}
+          PLAY_URL: ${{ vars.PLAY_URL }}
+        run: |
+          {
+            echo "### Deployment \`$V\`"
+            echo ""
+            echo "| Teil | Ergebnis |"
+            echo "| --- | --- |"
+            echo "| Backend | $B |"
+            echo "| Frontend | $F |"
+            echo ""
+            echo "[Spielen]($PLAY_URL)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # "skipped" is a valid outcome (nothing changed); only real failures count.
+          case "$B$F" in *failure*|*cancelled*) exit 1 ;; esac

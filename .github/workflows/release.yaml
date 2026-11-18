@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write # needed to create the GitHub release and upload the jar
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
     steps:
       - name: Resolve release tag
         id: tag
@@ -99,3 +101,15 @@ jobs:
             build/libs/tictactest-${{ steps.tag.outputs.version }}.jar.sha256
             build/frontend/tictactest-frontend-${{ steps.tag.outputs.version }}.zip
             build/frontend/tictactest-frontend-${{ steps.tag.outputs.version }}.zip.sha256
+
+  # The release is published; now put it into the environment. Calling the
+  # deploy workflow (rather than letting a `release:` event start it) avoids
+  # the rule that events raised by GITHUB_TOKEN do not trigger workflows, and
+  # keeps one definition of "how to deploy" that the manual rollback path
+  # (workflow_dispatch on Deploy) uses too.
+  deploy:
+    needs: release
+    uses: ./.github/workflows/deploy.yaml
+    with:
+      version: ${{ needs.release.outputs.version }}
+    secrets: inherit
