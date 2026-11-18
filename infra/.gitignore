@@ -1,0 +1,16 @@
+# State holds every attribute of every resource, including things that are
+# sensitive in other projects. It never belongs in Git.
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl.bak
+crash.log
+
+# Real variable values (account-specific, sometimes sensitive).
+*.tfvars
+!*.tfvars.example
+
+# The provider lock file IS committed: it pins exact provider versions and
+# hashes so every machine and every CI run resolves the same provider.
+# (The repo root .gitignore excludes all dotfiles, hence this re-inclusion.)
+!.terraform.lock.hcl

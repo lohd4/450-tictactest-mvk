@@ -1,0 +1,222 @@
+#!/bin/bash
+# TicTacTest instance provisioning. Runs ONCE, on first boot (cloud-init).
+#
+# This script sets up the RUNTIME only - Java, ttyd, nginx, a service user and
+# a systemd unit. It deliberately does not pin an application version: which
+# version runs is decided by the deployment and stored in
+# /etc/tictactest/version, so a new release never needs tofu apply and never
+# replaces this instance.
+set -euxo pipefail
+exec > >(tee /var/log/tictactest-setup.log) 2>&1
+
+PROJECT="${project_name}"
+ARTIFACTS_BUCKET="${artifacts_bucket}"
+AWS_REGION="${aws_region}"
+TTYD_VERSION="${ttyd_version}"
+TTYD_SHA256="${ttyd_sha256}"
+TTYD_MAX_CLIENTS="${ttyd_max_clients}"
+INITIAL_VERSION="${initial_version}"
+
+APP_DIR=/opt/tictactest
+CONF_DIR=/etc/tictactest
+SERVICE_USER=tictactest
+
+# --- packages ---------------------------------------------------------------
+dnf -y update
+# Corretto 25 is Amazon's build of OpenJDK 25 - the version the jar is built
+# with (build.gradle pins the toolchain to Java 25).
+dnf -y install java-25-amazon-corretto-headless nginx tar
+
+# The SSM agent is preinstalled on AL2023; make sure it is actually running,
+# because deployments arrive through it rather than over SSH.
+systemctl enable --now amazon-ssm-agent || true
+
+# --- service user -----------------------------------------------------------
+# The web console must not run as root: it is reachable by anyone with the URL.
+id -u "$SERVICE_USER" >/dev/null 2>&1 || \
+	useradd --system --create-home --shell /usr/sbin/nologin "$SERVICE_USER"
+
+install -d -o root -g root -m 0755 "$CONF_DIR"
+install -d -o root -g "$SERVICE_USER" -m 0775 "$APP_DIR"
+
+# --- ttyd: pinned version, verified checksum --------------------------------
+# ttyd is not in the Amazon Linux repositories. Downloading "latest" would mean
+# a different terminal after every instance rebuild, so both the version and
+# the digest are fixed. A mismatch aborts the boot rather than running an
+# unknown binary.
+curl -fsSL -o /tmp/ttyd \
+	"https://github.com/tsl0922/ttyd/releases/download/$TTYD_VERSION/ttyd.x86_64"
+echo "$TTYD_SHA256  /tmp/ttyd" | sha256sum -c -
+install -o root -g root -m 0755 /tmp/ttyd /usr/local/bin/ttyd
+rm -f /tmp/ttyd
+
+# --- launcher ---------------------------------------------------------------
+# Reads the desired version at START time, not at provisioning time. That is
+# the whole trick behind "a reboot brings back the same version": the answer
+# lives in a file on disk, not in this script.
+cat > /usr/local/bin/tictactest-run <<'LAUNCHER'
+#!/bin/bash
+set -euo pipefail
+CONF_DIR=/etc/tictactest
+APP_DIR=/opt/tictactest
+
+version=$(cat "$CONF_DIR/version" 2>/dev/null || true)
+if [ -z "$version" ]; then
+	echo "no version deployed yet (missing $CONF_DIR/version) - nothing to run" >&2
+	exit 1
+fi
+
+jar="$APP_DIR/tictactest-$version.jar"
+if [ ! -f "$jar" ]; then
+	echo "jar for version $version is missing at $jar" >&2
+	exit 1
+fi
+
+# Served by nginx at /version. Written here so it can never disagree with the
+# jar that is actually being started.
+printf '%s\n' "$version" > "$APP_DIR/version.txt"
+
+exec /usr/local/bin/ttyd \
+	--writable \
+	--port 7681 \
+	--interface 127.0.0.1 \
+	--max-clients __TTYD_MAX_CLIENTS__ \
+	--cwd /tmp \
+	java -jar "$jar"
+LAUNCHER
+sed -i "s/__TTYD_MAX_CLIENTS__/$TTYD_MAX_CLIENTS/" /usr/local/bin/tictactest-run
+chmod 0755 /usr/local/bin/tictactest-run
+
+# --- fetcher ----------------------------------------------------------------
+# Used by the deployment (and by ExecStartPre after a reboot) to make sure the
+# jar for the desired version is present locally. Pulls from the private
+# artefact bucket using the instance profile - no credentials on the box.
+cat > /usr/local/bin/tictactest-fetch <<FETCHER
+#!/bin/bash
+set -euo pipefail
+CONF_DIR=$CONF_DIR
+APP_DIR=$APP_DIR
+BUCKET=$ARTIFACTS_BUCKET
+REGION=$AWS_REGION
+
+version=\$(cat "\$CONF_DIR/version" 2>/dev/null || true)
+[ -n "\$version" ] || { echo "no version requested"; exit 0; }
+
+jar="\$APP_DIR/tictactest-\$version.jar"
+if [ -f "\$jar" ]; then
+	echo "version \$version already present"
+	exit 0
+fi
+
+echo "fetching version \$version from s3://\$BUCKET"
+aws s3 cp "s3://\$BUCKET/backend/tictactest-\$version.jar" "\$jar.tmp" --region "\$REGION"
+
+# Verify before putting it in place, if the release shipped a checksum.
+if aws s3 cp "s3://\$BUCKET/backend/tictactest-\$version.jar.sha256" /tmp/jar.sha256 --region "\$REGION" 2>/dev/null; then
+	expected=\$(awk '{print \$1}' /tmp/jar.sha256)
+	actual=\$(sha256sum "\$jar.tmp" | awk '{print \$1}')
+	if [ "\$expected" != "\$actual" ]; then
+		rm -f "\$jar.tmp"
+		echo "checksum mismatch for version \$version" >&2
+		exit 1
+	fi
+fi
+
+chown $SERVICE_USER:$SERVICE_USER "\$jar.tmp"
+mv "\$jar.tmp" "\$jar"
+echo "version \$version ready"
+FETCHER
+chmod 0755 /usr/local/bin/tictactest-fetch
+
+# --- systemd unit -----------------------------------------------------------
+cat > /etc/systemd/system/tictactest.service <<UNIT
+[Unit]
+Description=TicTacTest web console (ttyd)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=$SERVICE_USER
+Group=$SERVICE_USER
+
+# After a reboot the jar is normally still on disk; if the volume was replaced
+# this pulls it again from the artefact bucket before starting.
+ExecStartPre=/usr/local/bin/tictactest-fetch
+ExecStart=/usr/local/bin/tictactest-run
+
+# "startet nach einem Absturz neu"
+Restart=always
+RestartSec=2
+
+# The console is public, so narrow what the process can reach.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$APP_DIR
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+# --- nginx ------------------------------------------------------------------
+cat > /etc/nginx/conf.d/tictactest.conf <<'NGINX'
+server {
+	listen 80 default_server;
+	server_name _;
+
+	# Running backend version, plain text, e.g. "1.2.0".
+	# CORS: the frontend is served from the S3 website bucket, a different
+	# origin, so without this header the browser blocks the fetch.
+	# no-store: a cached answer would report the old version right after a
+	# deployment and make the pipeline's check meaningless.
+	location = /version {
+		alias /opt/tictactest/version.txt;
+		default_type text/plain;
+		add_header Access-Control-Allow-Origin "*" always;
+		add_header Cache-Control "no-store" always;
+	}
+
+	# Everything else is ttyd: the xterm.js page, /token and the /ws WebSocket.
+	location / {
+		proxy_pass http://127.0.0.1:7681;
+		proxy_http_version 1.1;
+
+		# Without these the terminal loads but never connects.
+		proxy_set_header Upgrade $http_upgrade;
+		proxy_set_header Connection "upgrade";
+
+		proxy_set_header Host $host;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto $scheme;
+
+		# A player thinking about their move must not be disconnected.
+		proxy_read_timeout 3600s;
+		proxy_send_timeout 3600s;
+	}
+}
+NGINX
+
+# AL2023's default server block also listens on 80; drop it so ours wins.
+sed -i '/^\s*server\s*{/,/^\s*}/d' /etc/nginx/nginx.conf || true
+nginx -t
+systemctl enable --now nginx
+
+# --- seed the first version (optional) --------------------------------------
+systemctl daemon-reload
+systemctl enable tictactest.service
+
+if [ -n "$INITIAL_VERSION" ]; then
+	printf '%s\n' "$INITIAL_VERSION" > "$CONF_DIR/version"
+	/usr/local/bin/tictactest-fetch || echo "initial fetch failed - deploy manually"
+	systemctl start tictactest.service || echo "initial start failed - deploy manually"
+else
+	# No application yet: nginx answers, /version 404s until the first deploy.
+	echo "no initial version configured - waiting for a deployment"
+fi
+
+echo "TicTacTest instance setup finished"
