@@ -310,4 +310,45 @@ public class TicTacToeMainTest extends TicTacToeTestFixtures implements WithAsse
     }
 
     //endregion
+
+    //region command line - help flag
+
+    @ParameterizedTest(name = "\"{0}\" asks for the usage text")
+    @ValueSource(strings = {"--help", "-h"})
+    void givenHelpFlag_whenIsHelpRequest_thenReturnsTrue(String flag) {
+        // GIVEN the help flag as the first argument
+        // WHEN the arguments are classified
+        // THEN they are recognised as a help request
+        assertThat(TicTacToeMain.isHelpRequest(new String[] {flag}))
+                .as("%s must print the usage text instead of starting a game", flag)
+                .isTrue();
+    }
+
+    @ParameterizedTest(name = "\"{0}\" is not the help flag")
+    @NullSource
+    @ValueSource(strings = {"--version", "help", "-H", "--helpme", ""})
+    void givenOtherArgument_whenIsHelpRequest_thenReturnsFalse(String argument) {
+        // GIVEN some other first argument (or none at all)
+        // WHEN the arguments are classified
+        // THEN only the exact flags count as a help request
+        var args = argument == null ? new String[0] : new String[] {argument};
+        assertThat(TicTacToeMain.isHelpRequest(args)).isFalse();
+    }
+
+    @StdIo
+    @Test
+    void givenHelpFlag_whenMain_thenPrintsUsageAndDoesNotStartAGame(StdOut out) {
+        // GIVEN the released entry point called with --help
+        // WHEN main runs
+        TicTacToeMain.main(new String[] {"--help"});
+
+        // THEN it explains how to start a game and which options exist, without consuming stdin
+        assertThat(out.capturedString())
+                .as("--help must document how the application is used")
+                .isEqualToIgnoringNewLines(TicTacToeMain.USAGE)
+                .contains("java -jar tictactest-<version>.jar")
+                .contains("--version");
+    }
+
+    //endregion
 }

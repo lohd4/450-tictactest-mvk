@@ -12,6 +12,19 @@ GitHub-Release-Notes übernommen – er muss **vor** dem Taggen aktualisiert sei
 
 _Noch keine Änderungen seit dem letzten Release._
 
+## 1.1.0 - 2026-11-18
+
+### Added
+
+- Kommandozeilen-Option `--help` (Kurzform `-h`) zeigt eine Kurzanleitung:
+  Aufrufsyntax, verfügbare Optionen und die Nummerierung der Spielfelder. Wer
+  das JAR herunterlädt, muss die Feldnummern 0–8 damit nicht mehr erraten.
+
+### Fixed
+
+- Tippfehler in der Zugaufforderung korrigiert: Die Eingabeaufforderung lautete
+  „where to **to** put the next X?" und lautet nun „where to put the next X?".
+
 ## 1.0.0 - 2026-11-18
 
 Erste offiziell veröffentlichte Version mit definiertem Release-Prozess.

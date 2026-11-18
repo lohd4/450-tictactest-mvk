@@ -16,9 +16,31 @@ public class TicTacToeMain {
 	/** Shown when no version is baked into the manifest, i.e. when not running from a released jar. */
 	static final String DEVELOPMENT_VERSION = "development build";
 
+	/** What the application prints for {@code --help}. */
+	static final String USAGE = """
+			TicTacToe - play against a simple computer opponent.
+
+			Usage: java -jar tictactest-<version>.jar [option]
+
+			Options:
+			  (none)           start a game; you are X and enter field numbers 0-8
+			  --help,    -h    show this help and exit
+			  --version, -v    show the version and exit
+
+			The board fields are numbered left to right, top to bottom:
+			  0 | 1 | 2
+			 ---+---+---
+			  3 | 4 | 5
+			 ---+---+---
+			  6 | 7 | 8""";
+
 	public static void main(String[] args) {
 		if (isVersionRequest(args)) {
 			System.out.println(versionInfo());
+			return;
+		}
+		if (isHelpRequest(args)) {
+			System.out.println(USAGE);
 			return;
 		}
 		play(new HumanPlayer(), new GreedyPlayer());
@@ -29,7 +51,19 @@ public class TicTacToeMain {
 	 * @return true if the caller asked for the version instead of a game
 	 */
 	static boolean isVersionRequest(String[] args) {
-		return args != null && args.length > 0 && ("--version".equals(args[0]) || "-v".equals(args[0]));
+		return isFirstArgument(args, "--version", "-v");
+	}
+
+	/**
+	 * @param args the raw command line arguments
+	 * @return true if the caller asked for the usage text instead of a game
+	 */
+	static boolean isHelpRequest(String[] args) {
+		return isFirstArgument(args, "--help", "-h");
+	}
+
+	private static boolean isFirstArgument(String[] args, String longFlag, String shortFlag) {
+		return args != null && args.length > 0 && (longFlag.equals(args[0]) || shortFlag.equals(args[0]));
 	}
 
 	/**

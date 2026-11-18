@@ -61,7 +61,7 @@ class TicTacToeE2ETest implements WithAssertions {
         // THEN a complete game is played and the winner announced - main really starts the game
         assertThat(out.capturedString())
                 .as("no arguments must start a game, not print the version")
-                .contains("where to to put the next CROSS?")
+                .contains("where to put the next CROSS?")
                 .contains("winner is: CROSS")
                 .doesNotContain("TicTacTest ");
     }
