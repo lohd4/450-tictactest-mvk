@@ -13,8 +13,43 @@ public class TicTacToeMain {
 
 	public static final int BOARD_SIZE = 9;
 
+	/** Shown when no version is baked into the manifest, i.e. when not running from a released jar. */
+	static final String DEVELOPMENT_VERSION = "development build";
+
 	public static void main(String[] args) {
+		if (isVersionRequest(args)) {
+			System.out.println(versionInfo());
+			return;
+		}
 		play(new HumanPlayer(), new GreedyPlayer());
+	}
+
+	/**
+	 * @param args the raw command line arguments
+	 * @return true if the caller asked for the version instead of a game
+	 */
+	static boolean isVersionRequest(String[] args) {
+		return args != null && args.length > 0 && ("--version".equals(args[0]) || "-v".equals(args[0]));
+	}
+
+	/**
+	 * @return the human readable version of this build, e.g. "TicTacTest 1.0.0". The version is read
+	 *         from the jar manifest's Implementation-Version, which the build fills from the git tag
+	 *         (see RELEASE.md); outside a jar there is no manifest, hence the development fallback.
+	 */
+	static String versionInfo() {
+		return versionInfo(TicTacToeMain.class.getPackage()
+				.getImplementationVersion());
+	}
+
+	/**
+	 * @param manifestVersion the Implementation-Version from the jar manifest, or null when running
+	 *        outside a jar (plain classes have no manifest)
+	 * @return the version line to print
+	 */
+	static String versionInfo(String manifestVersion) {
+		return "TicTacTest " + (manifestVersion == null || manifestVersion.isBlank() ? DEVELOPMENT_VERSION
+				: manifestVersion);
 	}
 
 	/**

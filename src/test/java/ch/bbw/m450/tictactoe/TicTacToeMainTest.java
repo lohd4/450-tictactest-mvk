@@ -9,7 +9,10 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junitpioneer.jupiter.StdIo;
+import org.junitpioneer.jupiter.StdOut;
 
 import ch.bbw.m450.tictactoe.TicTacToePlayer.Stone;
 import ch.bbw.m450.tictactoe.TicTacToeTestHelpers.ScriptedPlayer;
@@ -219,6 +222,91 @@ public class TicTacToeMainTest extends TicTacToeTestFixtures implements WithAsse
         assertThat(winner)
                 .as("scripted game must end with %s", expectedWinner == null ? "a draw" : expectedWinner)
                 .isEqualTo(expectedWinner);
+    }
+
+    //endregion
+
+    //region command line - version flag
+
+    @ParameterizedTest(name = "\"{0}\" asks for the version")
+    @ValueSource(strings = {"--version", "-v"})
+    void givenVersionFlag_whenIsVersionRequest_thenReturnsTrue(String flag) {
+        // GIVEN the version flag as the first (and only) argument
+        // WHEN the arguments are classified
+        // THEN they are recognised as a version request, not as a game start
+        assertThat(TicTacToeMain.isVersionRequest(new String[] {flag}))
+                .as("%s must print the version instead of starting a game", flag)
+                .isTrue();
+    }
+
+    @Test
+    void givenNoArguments_whenIsVersionRequest_thenReturnsFalse() {
+        // GIVEN an empty argument array (the normal `java -jar tictactest.jar` case)
+        // WHEN the arguments are classified
+        // THEN a game is started, not the version output
+        assertThat(TicTacToeMain.isVersionRequest(new String[0])).isFalse();
+    }
+
+    @Test
+    void givenNullArguments_whenIsVersionRequest_thenReturnsFalse() {
+        // GIVEN no argument array at all (defensive: a caller invoking main(null))
+        // WHEN the arguments are classified
+        // THEN this is not a version request and no NullPointerException escapes
+        assertThat(TicTacToeMain.isVersionRequest(null)).isFalse();
+    }
+
+    @ParameterizedTest(name = "\"{0}\" is not the version flag")
+    @ValueSource(strings = {"--help", "version", "-V", "--versionx", ""})
+    void givenOtherArgument_whenIsVersionRequest_thenReturnsFalse(String argument) {
+        // GIVEN some other first argument
+        // WHEN the arguments are classified
+        // THEN only the exact flags count as a version request
+        assertThat(TicTacToeMain.isVersionRequest(new String[] {argument})).isFalse();
+    }
+
+    @Test
+    void givenAManifestVersion_whenVersionInfo_thenReportsThatVersion() {
+        // GIVEN a released jar whose manifest carries the version the build took from the git tag
+        // WHEN the version string is assembled
+        // THEN exactly that version is reported
+        assertThat(TicTacToeMain.versionInfo("1.0.0"))
+                .as("a released jar must report the version baked in by the build")
+                .isEqualTo("TicTacTest 1.0.0");
+    }
+
+    @ParameterizedTest(name = "manifest version \"{0}\" -> development build")
+    @NullSource
+    @ValueSource(strings = {"", "   "})
+    void givenNoUsableManifestVersion_whenVersionInfo_thenReportsDevelopmentBuild(String manifestVersion) {
+        // GIVEN no (or a blank) Implementation-Version, as when running from plain classes
+        // WHEN the version string is assembled
+        // THEN it falls back to the development marker instead of printing an empty version
+        assertThat(TicTacToeMain.versionInfo(manifestVersion))
+                .as("an unversioned build must say so rather than print nothing")
+                .isEqualTo("TicTacTest " + TicTacToeMain.DEVELOPMENT_VERSION);
+    }
+
+    @Test
+    void givenNoManifest_whenVersionInfo_thenReadsTheVersionFromThePackage() {
+        // GIVEN the test classpath, where the classes come from build output without a jar manifest
+        // WHEN the no-argument version string is assembled
+        // THEN it reads the package's Implementation-Version and reports a development build
+        assertThat(TicTacToeMain.versionInfo())
+                .as("version is read from the jar manifest, which only a released jar has")
+                .isEqualTo("TicTacTest " + TicTacToeMain.DEVELOPMENT_VERSION);
+    }
+
+    @StdIo
+    @Test
+    void givenVersionFlag_whenMain_thenPrintsVersionAndDoesNotStartAGame(StdOut out) {
+        // GIVEN the released entry point called with --version
+        // WHEN main runs
+        TicTacToeMain.main(new String[] {"--version"});
+
+        // THEN it prints exactly the version line and no board (no stdin is consumed)
+        assertThat(out.capturedLines())
+                .as("--version must print one line and return instead of starting a game")
+                .containsExactly(TicTacToeMain.versionInfo());
     }
 
     //endregion
