@@ -13,6 +13,14 @@ name: Dev container image
 
 on:
   push:
+    # Branch pushes only. GitHub does NOT apply "paths" filters to tag pushes, so
+    # without this the workflow also ran on every release tag (v*) - where
+    # metadata-action produces no tag at all (type=ref,event=branch does not match
+    # a tag ref, and "latest" is gated on the default branch), and the build then
+    # failed with "tag is needed when pushing to registry". Releases are built by
+    # release.yaml; this workflow has no business running on a tag.
+    branches:
+      - '**'
     paths:
       - '.devcontainer/**'
       - '.github/workflows/devcontainer-image.yaml'
