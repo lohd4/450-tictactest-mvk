@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>TicTacTest</title>
+	<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>%E2%9D%8C</text></svg>">
+	<link rel="stylesheet" href="style.css">
+	<!-- config.js is written by the infrastructure (OpenTofu), not by the frontend release.
+	     It must be loaded before app.js. See docs/webkonsole.md. -->
+	<script src="config.js"></script>
+</head>
+<body>
+<header>
+	<h1>TicTacTest</h1>
+	<p class="tagline">Tic-Tac-Toe in der Web-Konsole &ndash; du bist <b class="x">X</b>, der Computer ist <b class="o">O</b>.</p>
+</header>
+
+<main>
+	<section class="rules" aria-labelledby="rules-heading">
+		<h2 id="rules-heading">So spielst du</h2>
+		<ol>
+			<li>Klicke ins Terminal, damit es den Tastaturfokus hat.</li>
+			<li>Tippe die <b>Nummer des Feldes</b> (0&ndash;8) und bestätige mit <kbd>Enter</kbd>.</li>
+			<li>Der Computer (<code>GreedyPlayer</code>) zieht sofort danach.</li>
+			<li>Ist die Partie vorbei, endet die Sitzung. <b>Seite neu laden</b> startet ein neues Spiel.</li>
+		</ol>
+		<table class="board-map" aria-label="Nummerierung der Spielfelder">
+			<tr><td>0</td><td>1</td><td>2</td></tr>
+			<tr><td>3</td><td>4</td><td>5</td></tr>
+			<tr><td>6</td><td>7</td><td>8</td></tr>
+		</table>
+		<p class="hint">Eine ungültige Eingabe (Buchstaben, belegtes Feld) beendet die Partie &ndash; das ist das
+			unveränderte Verhalten des Jars.</p>
+	</section>
+
+	<section class="console" aria-labelledby="console-heading">
+		<h2 id="console-heading" class="visually-hidden">Spiel-Terminal</h2>
+		<div id="console-frame">
+			<iframe id="terminal" title="TicTacTest Terminal" src="about:blank"></iframe>
+		</div>
+		<div id="console-error" class="error" hidden></div>
+		<button id="restart" type="button">Neues Spiel</button>
+	</section>
+</main>
+
+<footer>
+	<dl class="versions">
+		<div><dt>Frontend</dt><dd id="frontend-version">…</dd></div>
+		<div><dt>Backend</dt><dd id="backend-version">…</dd></div>
+	</dl>
+	<p class="repo"><a href="https://github.com/lohd4/450-tictactest-mvk">lohd4/450-tictactest-mvk</a></p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

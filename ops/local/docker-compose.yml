@@ -1,0 +1,54 @@
+# Local stand-in for the EC2 setup of Auftrag 2. Same shape, so what we learn
+# here carries over: ttyd runs the release jar, nginx sits in front and serves
+# the version endpoint, and the frontend is a SEPARATE origin (different port)
+# so cross-origin behaviour is exercised locally too.
+#
+#   browser ──► frontend  :8000   static site (S3 static website in the cloud)
+#               gateway   :8080   nginx: /version + reverse proxy to ttyd
+#                 └──────► console :7681  ttyd ──► java -jar <release jar>
+#
+# Everything under .runtime/ is produced by fetch-release.sh from RELEASE
+# ASSETS - nothing here is built from source. Start with ./run-local.sh.
+
+services:
+  console:
+    image: ghcr.io/lohd4/tictactest-dev:latest
+    # The image's own user (vscode, uid 1000) - the web console never runs as root.
+    user: "1000:1000"
+    command:
+      - /opt/bin/ttyd
+      - --writable              # -W: without this the browser can display but not type
+      - --port
+      - "7681"
+      - --max-clients
+      - "10"                    # bounds memory: one JVM (~45 MiB) per connected client
+      - --cwd
+      - /tmp
+      - java
+      - -jar
+      - /opt/app/tictactest.jar
+    volumes:
+      - ./.runtime/bin:/opt/bin:ro
+      - ./.runtime/app:/opt/app:ro
+    expose:
+      - "7681"
+    restart: unless-stopped
+
+  gateway:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx-gateway.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./.runtime/app:/srv/app:ro
+    depends_on:
+      - console
+    restart: unless-stopped
+
+  frontend:
+    image: nginx:1.27-alpine
+    ports:
+      - "8000:80"
+    volumes:
+      - ./.runtime/www:/usr/share/nginx/html:ro
+    restart: unless-stopped

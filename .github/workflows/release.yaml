@@ -68,11 +68,17 @@ jobs:
           VERSION: ${{ steps.tag.outputs.version }}
         run: java -jar "build/libs/tictactest-${VERSION}.jar" --version
 
-      - name: Generate SHA-256 checksum
-        working-directory: build/libs
+      - name: Package frontend
         env:
           VERSION: ${{ steps.tag.outputs.version }}
-        run: sha256sum "tictactest-${VERSION}.jar" > "tictactest-${VERSION}.jar.sha256"
+        run: bash .github/scripts/package-frontend.sh "$VERSION"
+
+      - name: Generate SHA-256 checksums
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          (cd build/libs && sha256sum "tictactest-${VERSION}.jar" > "tictactest-${VERSION}.jar.sha256")
+          (cd build/frontend && sha256sum "tictactest-frontend-${VERSION}.zip" > "tictactest-frontend-${VERSION}.zip.sha256")
 
       - name: Extract changelog section for this version
         id: notes
@@ -91,3 +97,5 @@ jobs:
           files: |
             build/libs/tictactest-${{ steps.tag.outputs.version }}.jar
             build/libs/tictactest-${{ steps.tag.outputs.version }}.jar.sha256
+            build/frontend/tictactest-frontend-${{ steps.tag.outputs.version }}.zip
+            build/frontend/tictactest-frontend-${{ steps.tag.outputs.version }}.zip.sha256
