@@ -1,0 +1,4 @@
+{
+  "version": "0.0.0-dev",
+  "note": "Placeholder for local development. The release workflow overwrites this file in the frontend archive with the released version."
+}
