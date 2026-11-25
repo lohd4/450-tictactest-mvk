@@ -12,6 +12,35 @@ GitHub-Release-Notes übernommen – er muss **vor** dem Taggen aktualisiert sei
 
 _Noch keine Änderungen seit dem letzten Release._
 
+## 1.2.0 - 2026-11-25
+
+### Added
+
+- TicTacTest ist als Web-App spielbar: Das unveränderte Release-Jar läuft in
+  einer Web-Konsole (ttyd hinter nginx), eingebettet in eine statische Seite
+  unter `frontend/`. Der Release enthält dafür neu das Frontend-Archiv
+  `tictactest-frontend-<version>.zip` samt Prüfsumme.
+- Die laufende Backend-Version ist unter `/version` per HTTP abfragbar und
+  stammt automatisch aus dem Release-Tag.
+- Infrastruktur als Code in `infra/` (**Terraform**): EC2-Instanz mit fester
+  Elastic IP, Web-Konsole als systemd-Dienst, privater Artefakt-Bucket und ein
+  S3-Bucket als öffentliche Static Website fürs Frontend.
+- Deployment bei einem Release (`.github/workflows/deploy.yaml`): deployt nur,
+  was sich seit dem vorherigen Release-Tag geändert hat, prüft danach die
+  laufende Version und kann jede veröffentlichte Version gezielt erneut
+  ausrollen. Ein Push auf `main` deployt nichts.
+- `ops/sync-github-env.sh` überträgt die Terraform-Outputs in die
+  GitHub-Variables und den Spiel-Link im README.
+- `ops/local/` startet die komplette Web-App lokal aus Release-Assets.
+
+### Documentation
+
+- [docs/webkonsole.md](docs/webkonsole.md): Werkzeugwahl, Sicherheitsrisiken,
+  Versionsabfrage, lokaler Betrieb.
+- [docs/deployment.md](docs/deployment.md): Secrets-Konzept, manueller und
+  automatischer Deployment-Ablauf, Robustheitsexperimente, Reflexion und
+  Promotion-Strategie.
+
 ## 1.1.0 - 2026-11-18
 
 ### Added
