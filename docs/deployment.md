@@ -327,9 +327,62 @@ Infrastruktur nie anfassen.
 cd infra
 cp terraform.tfvars.example terraform.tfvars   # terraform.tfvars ist gitignored
 terraform init
-terraform plan
-terraform apply
+terraform plan -minimal-refresh -out=tfplan
+terraform apply tfplan
 ```
+
+### 3.1 Learner-Lab-Eigenheit: `-minimal-refresh` ist nötig
+
+> Ohne `-minimal-refresh` schlägt **jedes** `plan` und `apply` fehl, sobald die
+> S3-Buckets existieren.
+
+Die Service Control Policy des Learner Lab verbietet
+`s3:GetBucketObjectLockConfiguration` ausdrücklich:
+
+```
+Error: reading S3 Bucket (tictactest-artifacts-…) object lock configuration:
+    api error AccessDenied: … is not authorized to perform:
+    s3:GetBucketObjectLockConfiguration … with an explicit deny in a service
+    control policy: arn:aws:organizations::…:policy/…/p-sf7jlt1e
+```
+
+Der AWS-Provider ruft diese Operation beim Lesen **jedes** `aws_s3_bucket` auf
+und behandelt die Verweigerung als fatalen Fehler. Nachgemessen:
+
+| | Ergebnis |
+| --- | --- |
+| Provider 6.74.0 | schlägt fehl |
+| Provider 5.100.0 | schlägt **identisch** fehl – kein Versionsproblem |
+| alle anderen benötigten S3-Aufrufe (`PutBucketVersioning`, `PutBucketWebsite`, `PutPublicAccessBlock`, `GetBucketOwnershipControls`, `PutObject`, `GetObject`) | erlaubt |
+
+Betroffen ist also **nur das Lesen des Buckets durch Terraform**, nicht S3
+selbst – das Deployment (Jar hochladen, Frontend synchronisieren) funktioniert
+uneingeschränkt.
+
+`-minimal-refresh` überspringt das Refresh für Objekte, die laut State seit dem
+letzten Apply unverändert sind, und damit genau den verbotenen Aufruf. Der Preis
+ist ehrlich zu benennen: **Drift, die von aussen entstanden ist, wird nicht
+erkannt.** Für ein Lab, in dem ausschliesslich Terraform und das Deployment
+schreiben, ist das vertretbar; in einem echten Projekt wäre es das nicht.
+`-refresh=false` würde dasselbe erreichen, ist aber gröber – es schaltet das
+Refresh auch für Ressourcen ab, deren Konfiguration sich geändert hat.
+
+**Beim allerersten Apply** (die Buckets existieren noch nicht) lässt sich der
+Aufruf nicht umgehen: Der Provider liest den Bucket direkt nach dem Anlegen, der
+Lesefehler bricht das Apply ab, und Terraform markiert die Buckets als
+`tainted` – obwohl sie korrekt angelegt und im State sind. Der Ablauf ist
+deshalb einmalig dreistufig, und genau so auch nach einem `terraform destroy`:
+
+```bash
+terraform apply                      # legt alles an, bricht an den Buckets ab
+terraform untaint aws_s3_bucket.artifacts
+terraform untaint aws_s3_bucket.frontend
+terraform plan -minimal-refresh -out=tfplan && terraform apply tfplan
+```
+
+Ohne das `untaint` würde Terraform die Buckets für „kaputt" halten und beim
+nächsten Apply ersetzen wollen – also löschen und neu anlegen, mitsamt neuen
+Namen und leerem Artefakt-Bucket.
 
 Danach die Outputs ansehen:
 
@@ -458,7 +511,7 @@ oben mit `VERSION=1.1.0`. Danach der Beweis, dass die Infrastruktur unberührt
 ist:
 
 ```bash
-cd infra && terraform plan
+cd infra && terraform plan -minimal-refresh
 # → "No changes. Your infrastructure matches the configuration."
 ```
 
@@ -467,16 +520,37 @@ Das ist der Kern von Auftrag 2: zwei Deployments, eine Instanz, kein
 
 ### 4.5 Protokoll der manuellen Deployments
 
-Auszufüllen beim Durchführen in einer laufenden Lab-Session:
+Durchgeführt am 2026-11-25 in einer Lab-Session:
 
 | Schritt | Erwartet | Beobachtet |
 | --- | --- | --- |
-| `terraform apply` | Instanz, EIP, 2 Buckets, `config.js` im Bucket | |
-| Release A deployt | `/version` → A, Frontend zeigt A | |
-| Partie im Browser | spielbar, GreedyPlayer antwortet | |
-| Release B deployt | `/version` → B, Frontend zeigt B | |
-| `terraform plan` danach | *No changes* | |
-| Instance-ID vorher/nachher | identisch | |
+| `terraform apply` | Instanz, EIP, 2 Buckets, `config.js` im Bucket | ✅ 13 Ressourcen; EIP `100.57.214.23`, Buckets `tictactest-artifacts-f07d38…` und `tictactest-frontend-1dead7a…`. Dreistufig wegen der SCP, siehe [3.1](#31-learner-lab-eigenheit--minimal-refresh-ist-nötig) |
+| Release A (`v1.1.0`) deployt | `/version` → `1.1.0` | ✅ Jar aus dem Release → S3 → Instanz **über das Instance Profile**, Prüfsumme verifiziert, `systemctl is-active` → `active`, `curl localhost/version` → `1.1.0` |
+| Partie spielbar | GreedyPlayer antwortet | ✅ auf der Instanz verifiziert: ANSI-gefärbtes Brett, GreedyPlayer zieht, ungültiger Zug wirft `IllegalStateException` (unverändertes Jar-Verhalten). ttyd-Seite durch nginx: HTTP `200` |
+| Release B deployt | `/version` → B | ⏳ **offen** – es existiert noch kein Release mit Frontend-Archiv (`frontend/` entstand nach dem Tag `v1.1.0`). Braucht einen neuen Tag |
+| `terraform plan` danach | *No changes* | ✅ „No changes. Your infrastructure matches the configuration." |
+| Instance-ID durch das Deployment | unverändert | ✅ `i-00808704bf953e685` vor und nach dem Deployment |
+
+> **Hinweis zum Browser-Test:** Vom Schulnetz aus ist die rohe EC2-Adresse durch
+> den Fortinet-Webfilter blockiert (`403 Web Filter Block Override`) – das ist
+> eine Eigenschaft des Netzes, nicht der Instanz. Nachgewiesen wurde die
+> Erreichbarkeit deshalb von der Instanz selbst aus. Für den Browser-Test
+> braucht es ein ungefiltertes Netz (Mobilfunk/privat) oder eine Freigabe.
+
+### 4.6 Sicherheitsnachweis auf der Instanz
+
+Die Zusagen aus [webkonsole.md](webkonsole.md#3-sicherheit) sind auf der
+laufenden Instanz nachgemessen, nicht nur behauptet:
+
+| Zusage | Nachweis |
+| --- | --- |
+| ttyd startet **nur das Jar**, nie eine Shell | `ps -o user=,args= -C ttyd` → `tictact+ /usr/local/bin/ttyd --writable --port 7681 --interface 127.0.0.1 --max-clients 10 --cwd /tmp java -jar /opt/tictactest/tictactest-1.1.0.jar` |
+| Dienst läuft **nicht als root** | `id tictactest` → `uid=992(tictactest) gid=992(tictactest)` |
+| Port 7681 ist von aussen **nicht** erreichbar | `ss -lntp` → ttyd nur auf `127.0.0.1:7681`, nginx auf `0.0.0.0:80`. Die Security Group öffnet ausschliesslich 80 |
+| Tippen im Browser möglich | `--writable` ist gesetzt |
+| Sitzungen begrenzt | `--max-clients 10` |
+| Versionsendpunkt mit CORS und ohne Cache | `Access-Control-Allow-Origin: *`, `Cache-Control: no-store` |
+| Laufzeitumgebung reproduzierbar | `openjdk version "25.0.5.1"` (Corretto), `ttyd version 1.7.7-40e79c7` – beide auf feste Version bzw. Prüfsumme festgenagelt |
 
 ---
 
@@ -766,12 +840,21 @@ Konkret:
 * **`INSTANCE_ID` in den GitHub Variables muss neu gesetzt werden** →
   `ops/sync-github-env.sh`.
 
-| Beobachtet | |
+**Beobachtet (2026-11-25).** Dieses Experiment fiel unfreiwillig an: Im
+Provisioning musste der nginx-Block korrigiert werden (die ursprüngliche
+`sed`-Zeile hinterliess eine ungültige `nginx.conf` und brach cloud-init ab).
+Die Änderung an `user_data` löste genau das beschriebene Verhalten aus:
+
+| | Beobachtet |
 | --- | --- |
-| `terraform plan`-Ausgabe (replace?) | |
-| Instance-ID vorher / nachher | |
-| EIP vorher / nachher | |
-| Version nach dem Apply | |
+| `terraform plan`-Ausgabe | `2 to add, 0 to change, 2 to destroy` – `aws_instance.console` **must be replaced**, zusammen mit `aws_eip_association` |
+| Instance-ID vorher / nachher | `i-0adec29b6bedd7863` → `i-00808704bf953e685` (**ersetzt**) |
+| EIP vorher / nachher | `100.57.214.23` → `100.57.214.23` (**unverändert**, wie vorhergesagt) |
+| Version nach dem Apply | **keine** – `/etc/tictactest/version` war leer, `tictactest.service` `enabled` aber `inactive`, `/version` → `404`. Erst das anschliessende Deployment brachte sie zurück |
+
+Das bestätigt beide Seiten der Konstruktion: Die Adresse übersteht ein
+Ersetzen der Instanz (deshalb die Elastic IP), die *Applikation* aber nicht –
+sie gehört bewusst nicht in `user_data`.
 
 ### 7.3 `terraform destroy` und wieder `terraform apply`
 
@@ -783,10 +866,15 @@ Konkret:
 | `play_url`, `console_url`, `version_url` | **ja** (sie enthalten die obigen Werte) |
 | Inhalt des Artefakt-Buckets | **weg** (`force_destroy = true`) |
 
-Bis wieder dieselbe Version läuft:
+Bis wieder dieselbe Version läuft (Buckets werden neu angelegt, also gilt wieder
+die dreistufige Abfolge aus [3.1](#31-learner-lab-eigenheit--minimal-refresh-ist-nötig)):
 
 ```bash
-cd infra && terraform apply
+cd infra
+terraform apply                         # bricht an den Buckets ab (SCP)
+terraform untaint aws_s3_bucket.artifacts
+terraform untaint aws_s3_bucket.frontend
+terraform plan -minimal-refresh -out=tfplan && terraform apply tfplan
 cd .. && ops/sync-github-env.sh         # neue Outputs → GitHub Variables + README
 gh workflow run deploy.yaml -f version=<aktuelle Version>
 ```
@@ -1064,7 +1152,8 @@ laufende Partie abbricht.
 
 ```bash
 # Infrastruktur (lokal, selten)
-cd infra && terraform init && terraform plan && terraform apply
+cd infra && terraform init
+terraform plan -minimal-refresh -out=tfplan && terraform apply tfplan
 terraform output -json github_variables
 cd .. && ops/sync-github-env.sh
 

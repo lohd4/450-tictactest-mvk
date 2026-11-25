@@ -67,12 +67,19 @@ cat <<SUMMARY
 SUMMARY
 
 # --- 1. GitHub Actions Variables --------------------------------------------
+gh_usable() {
+	command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1
+}
+
 if [ "$dry_run" = true ]; then
 	note "--dry-run: not touching GitHub or README.md"
+elif ! gh_usable; then
+	# Not fatal: the README update below is still worth doing, and the values
+	# are printed above so they can be pasted into
+	# Settings -> Secrets and variables -> Actions -> Variables.
+	printf '\033[1;33mSKIPPED:\033[0m gh is missing or not logged in - set the six Variables above by hand\n'
+	printf '          (install: winget install GitHub.cli, then: gh auth login)\n'
 else
-	command -v gh >/dev/null 2>&1 || die "gh not found in PATH - install the GitHub CLI or set the Variables by hand"
-	gh auth status >/dev/null 2>&1 || die "gh is not logged in - run 'gh auth login'"
-
 	note "setting GitHub Actions variables"
 	for pair in \
 		"AWS_REGION=$AWS_REGION" \

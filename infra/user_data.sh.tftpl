@@ -201,8 +201,47 @@ server {
 }
 NGINX
 
-# AL2023's default server block also listens on 80; drop it so ours wins.
-sed -i '/^\s*server\s*{/,/^\s*}/d' /etc/nginx/nginx.conf || true
+# AL2023 ships its own `server` block on port 80 inside nginx.conf, which would
+# compete with ours. It is NOT cut out with sed: a range like
+# `/^\s*server\s*{/,/^\s*}/` ends at the first line matching `}`, which is the
+# closing brace of the nested `location = /404.html {}` - that leaves orphaned
+# `error_page`/`location` directives at http level, `nginx -t` fails, and with
+# `set -e` the whole provisioning aborts before the service is ever started.
+#
+# Writing a minimal nginx.conf instead is also the more reproducible choice:
+# the result does not depend on how the distribution happens to format its
+# default file. Our server block in conf.d/tictactest.conf is then the only one.
+cat > /etc/nginx/nginx.conf <<'NGINXMAIN'
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log notice;
+pid /run/nginx.pid;
+
+include /usr/share/nginx/modules/*.conf;
+
+events {
+	worker_connections 1024;
+}
+
+http {
+	log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+	                '$status $body_bytes_sent "$http_referer" '
+	                '"$http_user_agent" "$http_x_forwarded_for"';
+	access_log /var/log/nginx/access.log main;
+
+	sendfile on;
+	tcp_nopush on;
+	keepalive_timeout 65;
+	types_hash_max_size 4096;
+
+	include /etc/nginx/mime.types;
+	default_type application/octet-stream;
+
+	# The only server block lives here: conf.d/tictactest.conf (written above).
+	include /etc/nginx/conf.d/*.conf;
+}
+NGINXMAIN
+
 nginx -t
 systemctl enable --now nginx
 

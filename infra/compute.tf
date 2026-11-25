@@ -31,7 +31,10 @@ resource "aws_instance" "console" {
     ttyd_max_clients = var.ttyd_max_clients
     artifacts_bucket = aws_s3_bucket.artifacts.id
     aws_region       = var.aws_region
-    initial_version  = coalesce(var.initial_version, "")
+    # Not coalesce(): it rejects "" as well as null, so a null initial_version
+    # (the default - bring the box up empty and let the DEPLOYMENT fill it)
+    # would fail the plan outright.
+    initial_version = var.initial_version == null ? "" : var.initial_version
   })
 
   # user_data only runs on first boot, so without this a change to the

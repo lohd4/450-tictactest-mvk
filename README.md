@@ -6,12 +6,9 @@ Release-Prozess und als Web-App in der Cloud spielbar.
 ## 🎮 Jetzt spielen
 
 <!-- play-url:start -->
-> ### ▶ Web-App
+> ### ▶ [Jetzt spielen](http://tictactest-frontend-1dead7af5e1136442f92fe8362.s3-website-us-east-1.amazonaws.com)
 >
-> _Noch nicht eingetragen._ Die Adresse entsteht erst beim `terraform apply`
-> (S3-Website-Endpunkt und Elastic IP sind nicht vorhersagbar). Danach setzt
-> `ops/sync-github-env.sh` diesen Block und die GitHub-Variables automatisch –
-> siehe [docs/deployment.md](docs/deployment.md#3-infrastruktur-aufbauen).
+> Web-Konsole: <http://100.57.214.23/version> meldet die laufende Backend-Version.
 <!-- play-url:end -->
 
 Du bist `X`, der Computer (`GreedyPlayer`) ist `O`. Zug eingeben heisst: Feldnummer
