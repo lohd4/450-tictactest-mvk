@@ -18,7 +18,7 @@ provider "aws" {
   default_tags {
     tags = {
       Project   = var.project_name
-      ManagedBy = "OpenTofu"
+      ManagedBy = "Terraform"
       Repo      = "lohd4/450-tictactest-mvk"
     }
   }

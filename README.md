@@ -5,7 +5,14 @@ Release-Prozess und als Web-App in der Cloud spielbar.
 
 ## 🎮 Jetzt spielen
 
-> **Web-App:** _wird in Auftrag 2 eingetragen, sobald die Infrastruktur steht_
+<!-- play-url:start -->
+> ### ▶ Web-App
+>
+> _Noch nicht eingetragen._ Die Adresse entsteht erst beim `terraform apply`
+> (S3-Website-Endpunkt und Elastic IP sind nicht vorhersagbar). Danach setzt
+> `ops/sync-github-env.sh` diesen Block und die GitHub-Variables automatisch –
+> siehe [docs/deployment.md](docs/deployment.md#3-infrastruktur-aufbauen).
+<!-- play-url:end -->
 
 Du bist `X`, der Computer (`GreedyPlayer`) ist `O`. Zug eingeben heisst: Feldnummer
 `0`–`8` tippen und mit <kbd>Enter</kbd> bestätigen.
@@ -57,6 +64,31 @@ Die Entwicklungsumgebung ist als DevContainer versioniert – siehe
 | [docs/deployment.md](docs/deployment.md) | Infrastruktur, Deployment, Secrets-Konzept, Promotion-Strategie |
 | [doc/TESTKONZEPT.md](doc/TESTKONZEPT.md) | Teststrategie |
 | [doc/TESTS.md](doc/TESTS.md) | Testfall-Dokumentation |
+
+## Cloud: Infrastruktur und Deployment
+
+Die Infrastruktur (EC2 mit Web-Konsole, Elastic IP, S3-Buckets) ist in
+[`infra/`](infra/) mit **Terraform** beschrieben und wird lokal ausgerollt:
+
+```bash
+cd infra
+cp terraform.tfvars.example terraform.tfvars
+terraform init && terraform plan && terraform apply
+cd .. && ops/sync-github-env.sh   # Outputs → GitHub Variables + Link oben
+```
+
+Die Applikation wird davon **getrennt** deployt: Ein Release-Tag `v*` deployt
+automatisch nur, was sich seit dem letzten Release geändert hat – ohne
+`terraform apply` und ohne die Instanz neu zu erstellen. Eine bereits
+veröffentlichte Version lässt sich gezielt erneut deployen:
+
+```bash
+gh workflow run deploy.yaml -f version=1.2.0
+```
+
+Alles dazu – Secrets-Konzept, Ablauf, Rollback, Reflexion – in
+[docs/deployment.md](docs/deployment.md).
+
 
 ## Release
 

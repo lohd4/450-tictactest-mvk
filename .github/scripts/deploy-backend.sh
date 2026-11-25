@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploys one released backend version to the running EC2 instance.
 #
-# The instance is NOT recreated and OpenTofu is not involved. All this does is
+# The instance is NOT recreated and Terraform is not involved. All this does is
 # put a jar into the artefact bucket, tell the instance which version it should
 # be running, and verify that it is.
 #

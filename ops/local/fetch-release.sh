@@ -66,7 +66,7 @@ else
 fi
 
 # --- config.js: owned by the environment, not by the release -----------------
-# In the cloud OpenTofu writes this into the bucket. Locally we write it here.
+# In the cloud Terraform writes this into the bucket. Locally we write it here.
 # Either way it is NOT part of the frontend archive, which is why a frontend
 # deployment can never overwrite it.
 cat > "$runtime/www/config.js" <<EOF

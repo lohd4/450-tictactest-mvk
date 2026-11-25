@@ -88,7 +88,7 @@ while IFS= read -r file; do
 		# --- neither ----------------------------------------------------
 		# Documentation, tests, the dev container, the infrastructure and the
 		# local ops helpers never change a released artefact. Infrastructure in
-		# particular is applied with `tofu apply`, deliberately not from here.
+		# particular is applied with `terraform apply`, deliberately not from here.
 		src/test/*|doc/*|docs/*|*.md|.devcontainer/*|infra/*|ops/*|.github/*|.vscode/*|.idea/*|.editorconfig|.gitattributes|.gitignore)
 			;;
 		*)

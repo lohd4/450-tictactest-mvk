@@ -4,7 +4,7 @@
  * Two things are deliberately NOT hardcoded here:
  *
  *   consoleUrl / versionUrl  come from config.js, which the infrastructure
- *                            (OpenTofu) writes per environment. Locally it
+ *                            (Terraform) writes per environment. Locally it
  *                            points at localhost, in the cloud at the EC2
  *                            instance. A frontend deployment never touches it.
  *
@@ -35,7 +35,7 @@
 	if (!config.consoleUrl) {
 		showError('Keine Konsolen-URL konfiguriert: config.js fehlt oder ist leer. ' +
 				'Lokal: frontend/config.sample.js nach config.js kopieren. ' +
-				'In der Cloud schreibt OpenTofu diese Datei.');
+				'In der Cloud schreibt Terraform diese Datei.');
 	} else {
 		terminal.src = config.consoleUrl;
 	}

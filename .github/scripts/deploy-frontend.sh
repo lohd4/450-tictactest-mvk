@@ -45,7 +45,7 @@ fi
 
 # --- 2. publish -------------------------------------------------------------
 # --delete removes files that no longer exist in the release, as required.
-# --exclude config.js is what keeps it from deleting the one file OpenTofu owns:
+# --exclude config.js is what keeps it from deleting the one file Terraform owns:
 # without it, --delete would remove config.js on the first deployment, the
 # frontend would lose the console URL and the page would load with a dead
 # terminal and no backend version. The exclude applies to both sides of the

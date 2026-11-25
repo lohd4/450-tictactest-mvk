@@ -12,12 +12,12 @@
 #  * after a reboot the instance can re-fetch its jar without depending on
 #    GitHub being reachable
 # Documented trade-off: one more hop in the pipeline (download from the
-# release, upload to S3) and one more thing to rebuild after tofu destroy.
+# release, upload to S3) and one more thing to rebuild after terraform destroy.
 
 resource "aws_s3_bucket" "artifacts" {
   # S3 bucket names are globally unique, so never a fixed name.
   bucket_prefix = "${var.project_name}-artifacts-"
-  force_destroy = true # lab environment: tofu destroy should not get stuck
+  force_destroy = true # lab environment: terraform destroy should not get stuck
 }
 
 resource "aws_s3_bucket_public_access_block" "artifacts" {
@@ -89,7 +89,7 @@ resource "aws_s3_bucket_policy" "frontend" {
 }
 
 # --- the one file the infrastructure owns inside the frontend ---------------
-# Only the infrastructure knows the address of the instance, so OpenTofu writes
+# Only the infrastructure knows the address of the instance, so Terraform writes
 # config.js itself. It is NOT part of the frontend release archive
 # (package-frontend.sh removes it and fails if it reappears), and the frontend
 # deployment syncs with --exclude config.js. That is what keeps a frontend
@@ -101,7 +101,7 @@ resource "aws_s3_object" "frontend_config" {
   cache_control = "no-store"
 
   content = <<-EOT
-    /* Written by OpenTofu - do not edit, do not ship in the release archive. */
+    /* Written by Terraform - do not edit, do not ship in the release archive. */
     window.TICTACTEST_CONFIG = {
       consoleUrl: 'http://${aws_eip.console.public_ip}/',
       versionUrl: 'http://${aws_eip.console.public_ip}/version'

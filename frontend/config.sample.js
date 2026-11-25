@@ -2,7 +2,7 @@
  * Per-environment configuration for the TicTacTest frontend.
  *
  * This file is NOT part of the frontend release archive. The infrastructure
- * owns it: OpenTofu writes the real config.js into the S3 bucket, because only
+ * owns it: Terraform writes the real config.js into the S3 bucket, because only
  * the infrastructure knows the address of the EC2 instance. A frontend
  * deployment syncs with --exclude config.js so it survives (see
  * docs/webkonsole.md and docs/deployment.md).

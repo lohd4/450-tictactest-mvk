@@ -4,7 +4,7 @@
 # This script sets up the RUNTIME only - Java, ttyd, nginx, a service user and
 # a systemd unit. It deliberately does not pin an application version: which
 # version runs is decided by the deployment and stored in
-# /etc/tictactest/version, so a new release never needs tofu apply and never
+# /etc/tictactest/version, so a new release never needs terraform apply and never
 # replaces this instance.
 set -euxo pipefail
 exec > >(tee /var/log/tictactest-setup.log) 2>&1

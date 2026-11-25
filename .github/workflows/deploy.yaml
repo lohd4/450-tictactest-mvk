@@ -8,7 +8,7 @@ name: Deploy
 #                      GITHUB_TOKEN do not start other workflows.)
 #   workflow_dispatch  deploy any already-published version on purpose -
 #                      rollback, or rebuilding the environment after a
-#                      tofu destroy / apply.
+#                      terraform destroy / apply.
 #
 # There is deliberately no `push:` trigger of any kind.
 on:

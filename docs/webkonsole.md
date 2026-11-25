@@ -253,7 +253,7 @@ window.TICTACTEST_CONFIG = {
 | Umgebung | Wer schreibt `config.js`? |
 | --- | --- |
 | lokal | `fetch-release.sh` (bzw. `cp config.sample.js config.js`) |
-| Cloud | **OpenTofu**, direkt in den S3-Bucket – nur die Infrastruktur kennt die Adresse der Instanz |
+| Cloud | **Terraform**, direkt in den S3-Bucket – nur die Infrastruktur kennt die Adresse der Instanz |
 
 Deshalb ist `config.js`
 
@@ -294,11 +294,11 @@ Ein Tag `v*` erzeugt neu vier Assets:
 ### Was gehört *nicht* ins Release?
 
 Die **systemd-Unit und die nginx-Konfiguration** gehören zur **Infrastruktur**
-(OpenTofu, Auftrag 2), nicht zum Release. Begründung: Sie beschreiben, *wie und
+(Terraform, Auftrag 2), nicht zum Release. Begründung: Sie beschreiben, *wie und
 wo* etwas läuft, nicht *was* läuft. Sie ändern sich mit der Instanz, nicht mit
 der Applikationsversion – ein Rollback auf `v1.0.0` soll die Unit nicht auf den
 damaligen Stand zurückdrehen. Umgekehrt heisst das: Eine Änderung an der Unit
-erfordert ein `tofu apply`, kein Release. Diese Grenze ist genau die Trennung,
+erfordert ein `terraform apply`, kein Release. Diese Grenze ist genau die Trennung,
 die Auftrag 2 verlangt.
 
 ## 9. Offene Punkte für Auftrag 2 und 3

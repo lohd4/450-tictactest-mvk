@@ -8,7 +8,8 @@
 #                 └──────► console :7681  ttyd ──► java -jar <release jar>
 #
 # Everything under .runtime/ is produced by fetch-release.sh from RELEASE
-# ASSETS - nothing here is built from source. Start with ./run-local.sh.
+# ASSETS - nothing here is built from source.
+# Start with: ./fetch-release.sh && docker compose up -d
 
 services:
   console:

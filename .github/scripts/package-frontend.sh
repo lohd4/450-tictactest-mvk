@@ -9,7 +9,7 @@
 #
 #   config.js     is NOT included. It holds the address of the web console,
 #                 which only the infrastructure knows, and it differs per
-#                 environment. OpenTofu writes it into the bucket once; the
+#                 environment. Terraform writes it into the bucket once; the
 #                 frontend deployment syncs with --exclude config.js so it
 #                 survives. Shipping it here would overwrite the real one with
 #                 a developer's localhost settings on the next deployment.
