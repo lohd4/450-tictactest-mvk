@@ -10,6 +10,10 @@ GitHub-Release-Notes übernommen – er muss **vor** dem Taggen aktualisiert sei
 
 ## Unreleased
 
+_Noch keine Änderungen seit dem letzten Release._
+
+## 1.2.0 - 2026-11-25
+
 ### Added
 
 - TicTacTest ist als Web-App spielbar: Das unveränderte Release-Jar läuft in
