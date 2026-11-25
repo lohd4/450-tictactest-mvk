@@ -14,3 +14,8 @@ crash.log
 # hashes so every machine and every CI run resolves the same provider.
 # (The repo root .gitignore excludes all dotfiles, hence this re-inclusion.)
 !.terraform.lock.hcl
+
+# Saved plan files: binary, machine-specific, and they can embed resource
+# attribute values. Never committed.
+tfplan
+*.tfplan
